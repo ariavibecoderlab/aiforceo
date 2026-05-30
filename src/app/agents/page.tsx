@@ -3,9 +3,8 @@ import Link from "next/link";
 import { Sidebar } from "@/app/_components/Sidebar";
 import { getCurrentWorkspace } from "@/lib/workspace";
 import { getRemainingTokens, TIER_MONTHLY_TOKENS } from "@/lib/credits";
-import { getCustomAgents } from "@/server/actions/custom-agents";
+import { getCustomAgents, deleteCustomAgentAction } from "@/server/actions/custom-agents";
 import { AGENTS, type AgentRole } from "@/lib/prompts";
-import { deleteCustomAgent } from "@/server/actions/custom-agents";
 
 export default async function AgentsPage() {
   const ctx = await getCurrentWorkspace();
@@ -121,9 +120,8 @@ export default async function AgentsPage() {
                   <Link href={`/agents/${agent.id}/edit`} className="btn btn-ghost text-xs" style={{ textDecoration: "none" }}>
                     Edit
                   </Link>
-                  <form action={async () => { "use server"; await deleteCustomAgent(agent.id); }}>
-                    <button type="submit" className="btn btn-ghost text-xs w-full" style={{ color: "var(--red)" }}
-                      onClick={() => { /* confirm handled server-side */ }}>
+                  <form action={deleteCustomAgentAction.bind(null, agent.id)}>
+                    <button type="submit" className="btn btn-ghost text-xs w-full" style={{ color: "var(--red)" }}>
                       Delete
                     </button>
                   </form>

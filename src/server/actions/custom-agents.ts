@@ -106,3 +106,11 @@ export async function deleteCustomAgent(id: string): Promise<Result> {
   revalidatePath("/", "layout");
   return { ok: true };
 }
+
+/**
+ * Void wrapper for deleteCustomAgent — used as a form action.
+ * Form actions must return void; errors are silently swallowed.
+ */
+export async function deleteCustomAgentAction(id: string): Promise<void> {
+  await deleteCustomAgent(id);
+}

@@ -422,7 +422,8 @@ export function ChatClient({
             "You've used all your credits this month. [Upgrade on the pricing page](/pricing).";
         setMessages((cur) => {
           const copy = [...cur];
-          copy[copy.length - 1] = { role: "assistant", content: `⚠ ${errMsg}` };
+          const last = copy[copy.length - 1];
+          copy[copy.length - 1] = { ...(last ?? {}), role: "assistant", content: `⚠ ${errMsg}` };
           return copy;
         });
         return;
@@ -447,7 +448,8 @@ export function ChatClient({
       const msg = err instanceof Error ? err.message : "Network error";
       setMessages((cur) => {
         const copy = [...cur];
-        copy[copy.length - 1] = { role: "assistant", content: `⚠ ${msg}` };
+        const last = copy[copy.length - 1];
+        copy[copy.length - 1] = { ...(last ?? {}), role: "assistant", content: `⚠ ${msg}` };
         return copy;
       });
     } finally {
@@ -658,7 +660,7 @@ export function ChatClient({
                   margin: "0 auto",
                 }}
               >
-                {QUICK_PROMPTS[role as import("./../../../lib/prompts").AgentRole] ?? [].map((q) => (
+                {(QUICK_PROMPTS[role as AgentRole] ?? []).map((q) => (
                   <button key={q} onClick={() => send(q)} className="chip">
                     {q}
                   </button>
@@ -855,7 +857,7 @@ export function ChatClient({
           {/* Quick prompts shown after conversation starts */}
           {messages.length > 0 && (
             <div className="flex gap-2 mt-3 flex-wrap">
-              {QUICK_PROMPTS[role as import("./../../../lib/prompts").AgentRole] ?? [].map((q) => (
+              {(QUICK_PROMPTS[role as AgentRole] ?? []).map((q) => (
                 <button
                   key={q}
                   onClick={() => send(q)}
