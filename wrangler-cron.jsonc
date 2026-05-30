@@ -1,0 +1,31 @@
+{
+  // Boardroom AI · Cron Worker
+  // A separate, tiny Cloudflare Worker whose only job is to fire the
+  // morning brief cron every hour and call the main app's HTTP route.
+  //
+  // Deploy steps (one-time):
+  //   1. Set the shared secret in both Workers:
+  //        pnpm wrangler secret put CRON_SECRET --config wrangler-cron.jsonc
+  //        pnpm wrangler secret put CRON_SECRET          (main app — same value)
+  //
+  //   2. Deploy this cron worker:
+  //        pnpm wrangler deploy --config wrangler-cron.jsonc
+  //
+  //   3. Verify in Cloudflare Dashboard → Workers → boardroom-ai-cron → Triggers
+  //      The cron "0 * * * *" should appear under "Cron Triggers".
+  //
+  // This worker is independent of the main app deployment — it only needs
+  // to be redeployed when wrangler-cron.jsonc or src/cron-worker.ts changes.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "boardroom-ai-cron",
+  "main": "src/cron-worker.ts",
+  "compatibility_date": "2025-11-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "triggers": {
+    "crons": ["0 * * * *"]
+  },
+  "vars": {
+    "APP_URL": "https://aiforceo.app"
+  }
+  // CRON_SECRET is set via: pnpm wrangler secret put CRON_SECRET --config wrangler-cron.jsonc
+}

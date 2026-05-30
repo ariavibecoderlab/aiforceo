@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { updateProfile } from "@/server/actions/settings";
+import { updateProfile, updateBriefPrefs } from "@/server/actions/settings";
 import { createPortalSession, createTopupCheckoutSession } from "@/server/actions/billing";
 
 /* ─── CONSTANTS ─────────────────────────────────────────────── */
@@ -810,6 +810,9 @@ export function SettingsClient({
   usageByAgent,
   ownerEmail,
   initial,
+  briefEnabled,
+  briefTimezone,
+  briefHour,
 }: {
   workspaceId: string;
   tier: string;
@@ -821,14 +824,24 @@ export function SettingsClient({
   usageByAgent: AgentUsage[];
   ownerEmail: string;
   initial: Initial;
+  briefEnabled: boolean;
+  briefTimezone: string;
+  briefHour: number;
 }) {
   const [form, setForm] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<
-    "profile" | "voice" | "financials" | "usage" | "billing" | "team"
+    "profile" | "voice" | "financials" | "usage" | "billing" | "team" | "notifications"
   >("profile");
+
+  // Morning brief state
+  const [briefOn,  setBriefOn]  = useState(briefEnabled);
+  const [briefTz,  setBriefTz]  = useState(briefTimezone);
+  const [briefHr,  setBriefHr]  = useState(briefHour);
+  const [briefSaving,  setBriefSaving]  = useState(false);
+  const [briefSaved,   setBriefSaved]   = useState(false);
 
   function field(k: keyof typeof form) {
     return (
@@ -863,15 +876,24 @@ export function SettingsClient({
     }
   }
 
+  async function saveBriefPrefs() {
+    setBriefSaving(true);
+    setBriefSaved(false);
+    const res = await updateBriefPrefs({ enabled: briefOn, timezone: briefTz, hour: briefHr });
+    setBriefSaving(false);
+    if (res.ok) { setBriefSaved(true); setTimeout(() => setBriefSaved(false), 3000); }
+  }
+
   const isProfileTab = ["profile", "voice", "financials"].includes(activeTab);
 
   const TABS: Array<{ key: typeof activeTab; label: string }> = [
-    { key: "profile", label: "Company Profile" },
-    { key: "voice", label: "Brand Voice" },
-    { key: "financials", label: "Financials" },
-    { key: "usage", label: "Usage" },
-    { key: "billing", label: "Billing" },
-    { key: "team", label: "Team" },
+    { key: "profile",       label: "Company Profile" },
+    { key: "voice",         label: "Brand Voice" },
+    { key: "financials",    label: "Financials" },
+    { key: "usage",         label: "Usage" },
+    { key: "billing",       label: "Billing" },
+    { key: "team",          label: "Team" },
+    { key: "notifications", label: "Notifications" },
   ];
 
   const tabStyle = (t: typeof activeTab): React.CSSProperties => ({
@@ -1129,6 +1151,102 @@ export function SettingsClient({
 
       {/* ── Team tab ── */}
       {activeTab === "team" && <TeamTab ownerEmail={ownerEmail} />}
+
+      {/* ── Notifications tab ── */}
+      {activeTab === "notifications" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          <div className="card" style={{ padding: 28 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Morning Brief</h2>
+                <p style={{ margin: "6px 0 0", fontSize: 13, color: "var(--muted)", maxWidth: 480 }}>
+                  Aria generates a daily executive summary covering all 5 functional areas —
+                  marketing, operations, finance, strategy, and technology — and saves it to your
+                  Aria chat each morning.
+                </p>
+              </div>
+              {/* Toggle */}
+              <button
+                type="button"
+                onClick={() => setBriefOn((v) => !v)}
+                style={{
+                  width: 48, height: 28, borderRadius: 14,
+                  background: briefOn ? "var(--accent)" : "var(--line)",
+                  border: "none", cursor: "pointer", position: "relative",
+                  transition: "background 0.2s", flexShrink: 0,
+                }}
+              >
+                <span style={{
+                  position: "absolute", top: 4,
+                  left: briefOn ? 24 : 4,
+                  width: 20, height: 20, borderRadius: "50%",
+                  background: "#fff",
+                  transition: "left 0.2s",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                }} />
+              </button>
+            </div>
+
+            {briefOn && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      Delivery time
+                    </label>
+                    <select
+                      className="input"
+                      value={briefHr}
+                      onChange={(e) => setBriefHr(Number(e.target.value))}
+                    >
+                      {Array.from({ length: 24 }, (_, i) => {
+                        const label = i === 0 ? "12:00 AM (midnight)" : i < 12 ? `${i}:00 AM` : i === 12 ? "12:00 PM (noon)" : `${i - 12}:00 PM`;
+                        return <option key={i} value={i}>{label}</option>;
+                      })}
+                    </select>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      Timezone
+                    </label>
+                    <select
+                      className="input"
+                      value={briefTz}
+                      onChange={(e) => setBriefTz(e.target.value)}
+                    >
+                      <option value="Asia/Kuala_Lumpur">Kuala Lumpur (MYT, UTC+8)</option>
+                      <option value="Asia/Singapore">Singapore (SGT, UTC+8)</option>
+                      <option value="Asia/Jakarta">Jakarta (WIB, UTC+7)</option>
+                      <option value="Asia/Bangkok">Bangkok (ICT, UTC+7)</option>
+                      <option value="Asia/Dubai">Dubai (GST, UTC+4)</option>
+                      <option value="Asia/Riyadh">Riyadh (AST, UTC+3)</option>
+                      <option value="Europe/London">London (GMT/BST)</option>
+                      <option value="America/New_York">New York (ET)</option>
+                      <option value="America/Los_Angeles">Los Angeles (PT)</option>
+                      <option value="UTC">UTC</option>
+                    </select>
+                  </div>
+                </div>
+                <p style={{ fontSize: 12, color: "var(--muted)", margin: 0 }}>
+                  Aria will save your brief to the Aria chat every morning at the time above.
+                  Open Aria at any time to read it.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button className="btn btn-primary" onClick={saveBriefPrefs} disabled={briefSaving}>
+              {briefSaving ? "Saving…" : "Save notification settings"}
+            </button>
+            {briefSaved && (
+              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--success)" }}>
+                ✓ Saved
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Save bar — only for profile/voice/financials */}
       {isProfileTab && (

@@ -30,7 +30,7 @@ export default async function SettingsPage() {
     getRemainingTokens(workspace.id),
     admin
       .from("workspaces")
-      .select("tier, stripe_customer_id, stripe_subscription_id")
+      .select("tier, stripe_customer_id, stripe_subscription_id, morning_brief_enabled, brief_timezone, brief_hour")
       .eq("id", workspace.id)
       .maybeSingle(),
     admin
@@ -119,6 +119,9 @@ export default async function SettingsPage() {
           quota={quota}
           stripeCustomerId={wsDetails?.stripe_customer_id ?? null}
           stripeSubscriptionId={wsDetails?.stripe_subscription_id ?? null}
+          briefEnabled={wsDetails?.morning_brief_enabled ?? false}
+          briefTimezone={wsDetails?.brief_timezone ?? "Asia/Kuala_Lumpur"}
+          briefHour={wsDetails?.brief_hour ?? 9}
           ledger={(ledger ?? []).map((r) => ({
             deltaTokens: r.delta_tokens,
             reason: r.reason,

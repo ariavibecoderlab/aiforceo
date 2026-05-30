@@ -77,6 +77,25 @@ export default async function DashboardPage() {
     if (!s.lastContent) s.lastContent = m.content;
   }
 
+  // Check if a morning brief was generated today (Aria conversation, assistant role)
+  const startOfToday = new Date();
+  startOfToday.setUTCHours(0, 0, 0, 0);
+  const ariaConvId = (convRows ?? []).find((c) => c.agent_role === "aria")?.id ?? null;
+  let todayBriefContent: string | null = null;
+  if (ariaConvId) {
+    const { data: briefMsg } = await admin
+      .from("messages")
+      .select("content")
+      .eq("workspace_id", workspace.id)
+      .eq("conversation_id", ariaConvId)
+      .eq("role", "assistant")
+      .gte("created_at", startOfToday.toISOString())
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    todayBriefContent = briefMsg?.content ?? null;
+  }
+
   // Load saved KPIs from DB (falls back to null → client uses localStorage → default)
   // Also load KPIs for all other workspaces so the Group View can compare companies
   const [savedKpis, ...otherKpisRaw] = await Promise.all([
@@ -127,6 +146,7 @@ export default async function DashboardPage() {
         quota={quota}
         connectedSources={(connectors ?? []).length}
         groupKpis={groupKpis}
+        todayBriefContent={todayBriefContent}
       />
     </div>
   );
