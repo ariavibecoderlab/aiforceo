@@ -26,6 +26,7 @@ export default async function SettingsPage() {
     { data: latestPnl },
     { data: ledger },
     { data: convRows },
+    { data: memories },
   ] = await Promise.all([
     getRemainingTokens(workspace.id),
     admin
@@ -64,6 +65,13 @@ export default async function SettingsPage() {
       .from("conversations")
       .select("id, agent_role")
       .eq("workspace_id", workspace.id),
+    admin
+      .from("agent_memories")
+      .select("id, workspace_id, category, content, importance, source_agent, last_reinforced_at, created_at")
+      .eq("workspace_id", workspace.id)
+      .order("importance", { ascending: false })
+      .order("last_reinforced_at", { ascending: false })
+      .limit(150),
   ]);
 
   const quota = TIER_MONTHLY_TOKENS[workspace.tier] ?? 100_000;
@@ -122,6 +130,7 @@ export default async function SettingsPage() {
           briefEnabled={wsDetails?.morning_brief_enabled ?? false}
           briefTimezone={wsDetails?.brief_timezone ?? "Asia/Kuala_Lumpur"}
           briefHour={wsDetails?.brief_hour ?? 9}
+          memories={memories ?? []}
           ledger={(ledger ?? []).map((r) => ({
             deltaTokens: r.delta_tokens,
             reason: r.reason,

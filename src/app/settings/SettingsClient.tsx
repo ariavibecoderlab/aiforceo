@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { updateProfile, updateBriefPrefs } from "@/server/actions/settings";
+import { updateProfile, updateBriefPrefs, deleteMemory } from "@/server/actions/settings";
 import { createPortalSession, createTopupCheckoutSession } from "@/server/actions/billing";
+import type { AgentMemory, MemoryCategory } from "@/lib/memory";
 
 /* ─── CONSTANTS ─────────────────────────────────────────────── */
 const CHALLENGES = [
@@ -813,6 +814,7 @@ export function SettingsClient({
   briefEnabled,
   briefTimezone,
   briefHour,
+  memories: initialMemories,
 }: {
   workspaceId: string;
   tier: string;
@@ -827,14 +829,19 @@ export function SettingsClient({
   briefEnabled: boolean;
   briefTimezone: string;
   briefHour: number;
+  memories: AgentMemory[];
 }) {
   const [form, setForm] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<
-    "profile" | "voice" | "financials" | "usage" | "billing" | "team" | "notifications"
+    "profile" | "voice" | "financials" | "usage" | "billing" | "team" | "notifications" | "memory"
   >("profile");
+
+  // AI Memory state
+  const [memories, setMemories] = useState<AgentMemory[]>(initialMemories);
+  const [memoryFilter, setMemoryFilter] = useState<MemoryCategory | "all">("all");
 
   // Morning brief state
   const [briefOn,  setBriefOn]  = useState(briefEnabled);
@@ -876,6 +883,11 @@ export function SettingsClient({
     }
   }
 
+  async function handleDeleteMemory(id: string) {
+    setMemories((m) => m.filter((x) => x.id !== id)); // optimistic
+    await deleteMemory(id);
+  }
+
   async function saveBriefPrefs() {
     setBriefSaving(true);
     setBriefSaved(false);
@@ -894,6 +906,7 @@ export function SettingsClient({
     { key: "billing",       label: "Billing" },
     { key: "team",          label: "Team" },
     { key: "notifications", label: "Notifications" },
+    { key: "memory",        label: "AI Memory" },
   ];
 
   const tabStyle = (t: typeof activeTab): React.CSSProperties => ({
@@ -1245,6 +1258,145 @@ export function SettingsClient({
               </span>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── AI Memory tab ── */}
+      {activeTab === "memory" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          <div>
+            <h2 style={{ margin: "0 0 6px", fontSize: 18, fontWeight: 700 }}>AI Memory</h2>
+            <p style={{ margin: 0, fontSize: 13, color: "var(--muted)", maxWidth: 520 }}>
+              Facts your AI executives have learned about your business from your conversations.
+              These are automatically injected into every chat so your agents always remember context.
+            </p>
+          </div>
+
+          {/* Category filter */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {(["all", "business_fact", "decision", "preference", "concern", "milestone"] as const).map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setMemoryFilter(cat)}
+                style={{
+                  padding: "5px 14px",
+                  borderRadius: 20,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  border: "1px solid var(--line)",
+                  cursor: "pointer",
+                  background: memoryFilter === cat ? "var(--accent)" : "var(--soft)",
+                  color: memoryFilter === cat ? "#0E1726" : "var(--muted)",
+                }}
+              >
+                {cat === "all" ? "All" :
+                 cat === "business_fact" ? "Business Facts" :
+                 cat === "decision" ? "Decisions" :
+                 cat === "preference" ? "Preferences" :
+                 cat === "concern" ? "Concerns" : "Milestones"}
+              </button>
+            ))}
+          </div>
+
+          {/* Memory cards */}
+          {(() => {
+            const CATEGORY_COLOR: Record<string, string> = {
+              business_fact: "#0096C7",
+              decision:      "#C5A572",
+              preference:    "#7C3AED",
+              concern:       "#F96167",
+              milestone:     "#3FB984",
+            };
+            const CATEGORY_LABEL: Record<string, string> = {
+              business_fact: "Business Fact",
+              decision:      "Decision",
+              preference:    "Preference",
+              concern:       "Concern",
+              milestone:     "Milestone",
+            };
+            const filtered = memoryFilter === "all"
+              ? memories
+              : memories.filter((m) => m.category === memoryFilter);
+
+            if (filtered.length === 0) {
+              return (
+                <div className="card" style={{ padding: 32, textAlign: "center" }}>
+                  <p style={{ margin: 0, fontSize: 14, color: "var(--muted)" }}>
+                    {memories.length === 0
+                      ? "Your AI executives haven't learned anything yet. Start chatting and they'll begin remembering important facts about your business."
+                      : `No ${CATEGORY_LABEL[memoryFilter] ?? memoryFilter} memories yet.`}
+                  </p>
+                </div>
+              );
+            }
+
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {filtered.map((mem) => (
+                  <div
+                    key={mem.id}
+                    className="card"
+                    style={{
+                      padding: "14px 16px",
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 12,
+                    }}
+                  >
+                    {/* Category badge */}
+                    <span style={{
+                      flexShrink: 0,
+                      padding: "2px 10px",
+                      borderRadius: 20,
+                      fontSize: 10,
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      background: `${CATEGORY_COLOR[mem.category] ?? "#888"}22`,
+                      color: CATEGORY_COLOR[mem.category] ?? "#888",
+                      border: `1px solid ${CATEGORY_COLOR[mem.category] ?? "#888"}44`,
+                      marginTop: 2,
+                    }}>
+                      {CATEGORY_LABEL[mem.category] ?? mem.category}
+                    </span>
+                    {/* Content */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5 }}>{mem.content}</p>
+                      <p style={{ margin: "3px 0 0", fontSize: 11, color: "var(--muted)" }}>
+                        {"●".repeat(mem.importance)}{"○".repeat(3 - mem.importance)} importance
+                        {" · "}
+                        {new Date(mem.last_reinforced_at).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}
+                        {mem.source_agent ? ` · via ${mem.source_agent.toUpperCase()}` : ""}
+                      </p>
+                    </div>
+                    {/* Delete */}
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteMemory(mem.id)}
+                      title="Delete memory"
+                      style={{
+                        flexShrink: 0,
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "var(--muted)",
+                        fontSize: 16,
+                        padding: "2px 4px",
+                        lineHeight: 1,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
+          <p style={{ fontSize: 12, color: "var(--muted)", margin: 0 }}>
+            {memories.length} memor{memories.length === 1 ? "y" : "ies"} stored · max 150 per workspace
+          </p>
         </div>
       )}
 

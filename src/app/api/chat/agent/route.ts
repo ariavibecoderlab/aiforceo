@@ -13,6 +13,7 @@ import { getAnthropic, ANTHROPIC_MODEL } from "@/lib/anthropic";
 import { buildSystemPrompt, type AgentRole } from "@/lib/prompts";
 import { getRemainingTokens, recordUsage } from "@/lib/credits";
 import { buildSheetsContext, fetchSheetByUrl } from "@/lib/google-sheets";
+import { loadMemories, extractAndSaveMemories } from "@/lib/memory";
 
 const RequestSchema = z.object({
   conversationId: z.string().uuid(),
@@ -104,7 +105,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       /https:\/\/docs\.google\.com\/spreadsheets\/d\/[a-zA-Z0-9-_]+[^\s]*/,
     )?.[0] ?? null;
 
-  const [{ data: profile }, { data: voice }, sheetsCtx, urlSheetCtx] =
+  const [{ data: profile }, { data: voice }, sheetsCtx, urlSheetCtx, memories] =
     await Promise.all([
       admin
         .from("business_profiles")
@@ -124,6 +125,8 @@ export async function POST(req: NextRequest): Promise<Response> {
       sheetsUrlMatch
         ? fetchSheetByUrl(workspace.id, sheetsUrlMatch).catch(() => null)
         : Promise.resolve(null),
+      // Agent memories — fast indexed read, non-fatal
+      loadMemories(workspace.id, 12).catch(() => []),
     ]);
 
   // URL-pasted sheet leads; pre-configured sheet fills in context below it.
@@ -159,6 +162,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     wordsToAvoid: voice?.words_to_avoid ?? [],
     connectorData,
     sheetsHint,
+    memories,
   });
 
   // 7. Persist the user message before streaming
@@ -229,6 +233,14 @@ export async function POST(req: NextRequest): Promise<Response> {
           inputTokens,
           outputTokens,
           messageId: aMsg?.id,
+        });
+
+        // Extract and persist memories — fire-and-forget, never blocks the stream
+        void extractAndSaveMemories({
+          workspaceId: workspace.id,
+          agentRole: role,
+          userMessage: lastUser.content,
+          assistantMessage: fullText,
         });
 
         // Update conversation title from first user message

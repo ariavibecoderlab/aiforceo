@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getAnthropic, ANTHROPIC_MODEL } from "@/lib/anthropic";
 import { buildSystemPrompt } from "@/lib/prompts";
 import { getRemainingTokens, recordUsage } from "@/lib/credits";
+import { loadMemories } from "@/lib/memory";
 
 const MIN_TOKENS_FOR_BRIEF = 5_000;
 
@@ -30,7 +31,7 @@ export async function generateMorningBrief(
   }
 
   // Load business context (same fields as the interactive agent route)
-  const [{ data: profile }, { data: voice }, { data: latestPnl }] =
+  const [{ data: profile }, { data: voice }, { data: latestPnl }, memories] =
     await Promise.all([
       admin
         .from("business_profiles")
@@ -49,6 +50,7 @@ export async function generateMorningBrief(
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
+      loadMemories(workspaceId, 12).catch(() => []),
     ]);
 
   const system = buildSystemPrompt("aria", {
@@ -66,6 +68,7 @@ export async function generateMorningBrief(
     connectorData: latestPnl?.raw_text
       ? `== Latest P&L (${latestPnl.period}) ==\n${latestPnl.raw_text}`
       : undefined,
+    memories,
   });
 
   // Find or create the Aria conversation for this workspace

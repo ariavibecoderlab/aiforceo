@@ -150,3 +150,21 @@ export async function updateBriefPrefs(input: unknown): Promise<Result> {
   revalidatePath("/settings");
   return { ok: true };
 }
+
+/** Delete a single memory row — gated by workspace ownership. */
+export async function deleteMemory(memoryId: string): Promise<Result> {
+  await requireUser();
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) return { ok: false, error: "No workspace found" };
+
+  const admin = createSupabaseAdminClient();
+  const { error } = await admin
+    .from("agent_memories")
+    .delete()
+    .eq("id", memoryId)
+    .eq("workspace_id", ctx.workspace.id); // belt-and-suspenders ownership check
+
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/settings");
+  return { ok: true };
+}
