@@ -27,27 +27,17 @@ export const metadata: Metadata = {
     title: "Boardroom AI — Your AI C-Suite",
     description:
       "Six AI executives customized for your business. CMO, COO, CFO, CEO, CTO, and Aria — in 30 minutes.",
-    images: [
-      {
-        url: "/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "Boardroom AI — Your AI C-Suite"
-      }
-    ]
   },
   twitter: {
     card: "summary_large_image",
     title: "Boardroom AI — Your AI C-Suite",
     description: "Six AI executives customized for your business in 30 minutes.",
-    images: ["/og-image.png"]
   },
   robots: {
     index: true,
     follow: true,
     googleBot: { index: true, follow: true }
-  },
-  verification: { google: "" }
+  }
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }): React.ReactElement {

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { updateProfile } from "@/server/actions/settings";
-import { createPortalSession } from "@/server/actions/billing";
+import { createPortalSession, createTopupCheckoutSession } from "@/server/actions/billing";
 
 /* ─── CONSTANTS ─────────────────────────────────────────────── */
 const CHALLENGES = [
@@ -536,16 +536,23 @@ function BillingTab({
           Need more tokens?
         </h3>
         <p style={{ margin: "0 0 14px", fontSize: 13, color: "var(--muted)" }}>
-          Top-up packs are available in addition to your monthly quota. Unused
-          top-up tokens carry forward.
+          Top-up packs add 200K tokens to your balance. Unused top-up tokens
+          carry forward and never expire.
         </p>
-        <Link
-          href="/pricing"
-          className="btn"
-          style={{ textDecoration: "none", fontSize: 13 }}
-        >
-          View top-up options
-        </Link>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <form action={createTopupCheckoutSession}>
+            <button type="submit" className="btn" style={{ fontSize: 13 }}>
+              Buy 200K tokens →
+            </button>
+          </form>
+          <Link
+            href="/pricing"
+            className="btn btn-ghost"
+            style={{ textDecoration: "none", fontSize: 13 }}
+          >
+            View all plans
+          </Link>
+        </div>
       </div>
 
       {/* Billing history */}

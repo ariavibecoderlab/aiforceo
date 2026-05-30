@@ -15,7 +15,7 @@ const ROLES: AgentRole[] = ["aria", "cmo", "coo", "cfo", "ceo", "cto"];
 
 export default async function DashboardPage() {
   const ctx = await getCurrentWorkspace();
-  if (!ctx) redirect("/onboarding");
+  if (!ctx || !ctx.workspace.onboarded) redirect("/onboarding");
   const { workspace, allWorkspaces } = ctx;
 
   const remaining = await getRemainingTokens(workspace.id);

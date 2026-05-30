@@ -6,7 +6,13 @@
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { requireWorkspaceOwner, AuthError } from "@/lib/auth/require";
-import { getStripe, PRICE_IDS } from "@/lib/stripe";
+import {
+  getStripe,
+  isStripeConfigured,
+  PRICE_IDS,
+  TOPUP_PRICE_ID,
+  TOPUP_TOKENS,
+} from "@/lib/stripe";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const CreateCheckout = z.object({
@@ -14,6 +20,7 @@ const CreateCheckout = z.object({
 });
 
 export async function createCheckoutSession(formData: FormData): Promise<void> {
+  if (!isStripeConfigured()) redirect("/pricing?error=billing_not_configured");
   const parsed = CreateCheckout.safeParse({ plan: formData.get("plan") });
   if (!parsed.success) redirect("/pricing?error=invalid_plan");
   const plan = parsed.data.plan;
@@ -58,8 +65,46 @@ export async function createCheckoutSession(formData: FormData): Promise<void> {
   redirect(session.url);
 }
 
+/** One-time top-up purchase: adds TOPUP_TOKENS to the workspace ledger on payment. */
+export async function createTopupCheckoutSession(): Promise<void> {
+  if (!isStripeConfigured()) redirect("/pricing?error=billing_not_configured");
+
+  let user: { id: string; email?: string | null };
+  let workspaceId: string;
+  try {
+    const owner = await requireWorkspaceOwner();
+    user = { id: owner.user.id, email: owner.user.email };
+    workspaceId = owner.workspace.id;
+  } catch (err) {
+    if (err instanceof AuthError && err.code === "UNAUTHENTICATED") {
+      redirect("/login?next=/settings");
+    }
+    throw err;
+  }
+
+  const stripe = getStripe();
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    customer_email: user.email ?? undefined,
+    line_items: [{ price: TOPUP_PRICE_ID, quantity: 1 }],
+    success_url: `${baseUrl}/settings?topup=success`,
+    cancel_url: `${baseUrl}/settings`,
+    metadata: {
+      workspace_id: workspaceId,
+      user_id: user.id,
+      type: "topup",
+      tokens: String(TOPUP_TOKENS),
+    },
+  });
+  if (!session.url) throw new Error("Stripe did not return a checkout URL");
+  redirect(session.url);
+}
+
 /** Opens the Stripe customer portal for the active workspace's billing. */
 export async function createPortalSession(): Promise<void> {
+  if (!isStripeConfigured()) redirect("/pricing?error=billing_not_configured");
   let workspaceId: string;
   let stripeCustomerId: string | null;
   try {

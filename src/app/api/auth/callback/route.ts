@@ -7,7 +7,8 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const type = url.searchParams.get("type"); // "recovery" for password reset
-  const next = url.searchParams.get("next") ?? "/dashboard";
+  const rawNext = url.searchParams.get("next") ?? "/dashboard";
+  const next = rawNext.startsWith("/") ? rawNext : "/dashboard";
 
   const supabase = await createSupabaseServerClient();
 

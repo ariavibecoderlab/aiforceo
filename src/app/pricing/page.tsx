@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { createCheckoutSession } from "@/server/actions/billing";
+import { createCheckoutSession, createTopupCheckoutSession } from "@/server/actions/billing";
+import { isStripeConfigured, TOPUP_TOKENS } from "@/lib/stripe";
 
 const TIERS = [
   {
@@ -20,6 +21,8 @@ const TIERS = [
 ] as const;
 
 export default function PricingPage() {
+  const stripeReady = isStripeConfigured();
+
   return (
     <main className="max-w-6xl mx-auto px-6 py-20">
       <Link href="/" className="flex items-center gap-2.5 font-bold mb-12">
@@ -27,15 +30,24 @@ export default function PricingPage() {
         Boardroom <span style={{ color: "var(--accent)" }}>AI</span>
       </Link>
 
+      {/* ── Banners ── */}
+      {!stripeReady && (
+        <div className="mb-8 rounded-xl px-5 py-4 text-sm font-medium"
+             style={{ background: "rgba(197,165,114,0.1)", border: "1px solid rgba(197,165,114,0.3)", color: "var(--gold)" }}>
+          ⚠ Billing is not yet configured. Plans are displayed for preview only — checkout is not active.
+        </div>
+      )}
+
       <span className="inline-block text-xs uppercase tracking-widest font-bold mb-3" style={{ color: "var(--accent)" }}>Pricing</span>
       <h1 className="serif text-5xl leading-tight max-w-3xl">
         Less than one junior employee.{" "}
         <em className="italic" style={{ color: "var(--primary)" }}>An entire executive team.</em>
       </h1>
       <p className="text-lg text-[var(--muted)] mt-4 max-w-2xl">
-        One-time setup fee plus a monthly subscription that includes generous AI credits. Top up only if you use more.
+        One-time setup fee plus a monthly subscription that includes generous AI credits. Top up only if you need more.
       </p>
 
+      {/* ── Subscription plans ── */}
       <div className="grid md:grid-cols-3 gap-5 mt-14">
         {TIERS.map((t) => {
           const featured = "featured" in t && t.featured;
@@ -65,13 +77,45 @@ export default function PricingPage() {
               </ul>
               <form action={createCheckoutSession} className="mt-auto">
                 <input type="hidden" name="plan" value={t.plan} />
-                <button type="submit" className={`btn w-full justify-center ${featured ? "" : "btn-ghost"}`}>
-                  Choose {t.name}
+                <button
+                  type="submit"
+                  disabled={!stripeReady}
+                  className={`btn w-full justify-center ${featured ? "" : "btn-ghost"}`}
+                  title={!stripeReady ? "Billing not yet configured" : undefined}
+                >
+                  {stripeReady ? `Choose ${t.name}` : "Coming soon"}
                 </button>
               </form>
             </div>
           );
         })}
+      </div>
+
+      {/* ── Top-up pack ── */}
+      <div className="mt-10 card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+           style={{ border: "1px solid var(--line)", background: "var(--soft)" }}>
+        <div>
+          <p className="text-xs uppercase tracking-widest font-bold mb-1" style={{ color: "var(--muted)" }}>
+            Token Top-up
+          </p>
+          <p className="font-bold text-xl">
+            {(TOPUP_TOKENS / 1000).toFixed(0)}K tokens{" "}
+            <span className="text-sm font-normal text-[var(--muted)]">— one-time, carry forward</span>
+          </p>
+          <p className="text-sm text-[var(--muted)] mt-1">
+            Buy extra tokens any time. Unused top-up tokens never expire.
+          </p>
+        </div>
+        <form action={createTopupCheckoutSession} className="shrink-0">
+          <button
+            type="submit"
+            disabled={!stripeReady}
+            className="btn btn-ghost"
+            title={!stripeReady ? "Billing not yet configured" : undefined}
+          >
+            {stripeReady ? "Buy top-up →" : "Coming soon"}
+          </button>
+        </form>
       </div>
 
       <p className="text-center text-sm text-[var(--muted)] mt-12">

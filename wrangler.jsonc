@@ -18,7 +18,7 @@
   },
   "observability": { "enabled": true },
   "vars": {
-    "NEXT_PUBLIC_APP_URL": "https://boardroom-ai.ariavibecoderlab.workers.dev",
+    "NEXT_PUBLIC_APP_URL": "https://aiforceo.app",
     "NEXT_PUBLIC_SUPABASE_URL": "https://tfduiiiiezpepzhyagwf.supabase.co",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRmZHVpaWlpZXpwZXB6aHlhZ3dmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5OTI5MTMsImV4cCI6MjA5NDU2ODkxM30.5EnFhbQbCpYWQNnpfSCjWTRrN_-J8rKb54-OFLpEHvU",
     "ANTHROPIC_MODEL": "claude-sonnet-4-6",

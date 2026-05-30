@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { TIER_MONTHLY_TOKENS } from "@/lib/credits";
 
 const VALID_TIERS = ["trial", "starter", "growth", "scale"] as const;
 type Tier = (typeof VALID_TIERS)[number];
@@ -17,7 +18,7 @@ export async function adminChangeTier(formData: FormData): Promise<void> {
   const admin = createSupabaseAdminClient();
   await admin
     .from("workspaces")
-    .update({ tier })
+    .update({ tier, monthly_token_quota: TIER_MONTHLY_TOKENS[tier] ?? 100_000 })
     .eq("id", workspaceId)
     .throwOnError();
 
