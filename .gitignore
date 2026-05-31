@@ -12,3 +12,4 @@ dist
 coverage
 .turbo
 tsconfig.tsbuildinfo
+supabase/.temp

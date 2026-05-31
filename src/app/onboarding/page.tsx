@@ -85,6 +85,8 @@ export default function OnboardingPage() {
   const [businessName, setBusinessName] = useState("");
   const [industry, setIndustry] = useState<string>(INDUSTRIES[0]!);
   const [size, setSize] = useState<(typeof SIZES)[number]["v"]>("small");
+  const [primaryOffer, setPrimaryOffer] = useState("");
+  const [targetCustomer, setTargetCustomer] = useState("");
   const [challenges, setChallenges] = useState<string[]>([]);
   const [goals90d, setGoals90d] = useState("");
   const [voiceSample, setVoiceSample] = useState("");
@@ -107,6 +109,8 @@ export default function OnboardingPage() {
       businessName,
       industry,
       size,
+      primaryOffer,
+      targetCustomer,
       challenges,
       goals90d,
       voiceSample,
@@ -231,6 +235,22 @@ export default function OnboardingPage() {
                     </button>
                   ))}
                 </div>
+              </Field>
+              <Field label="What's your main product or service?">
+                <input
+                  className="input"
+                  value={primaryOffer}
+                  onChange={(e) => setPrimaryOffer(e.target.value)}
+                  placeholder="e.g. Specialty coffee & pastries, dine-in & takeaway"
+                />
+              </Field>
+              <Field label="Who is your ideal customer?">
+                <input
+                  className="input"
+                  value={targetCustomer}
+                  onChange={(e) => setTargetCustomer(e.target.value)}
+                  placeholder="e.g. Working professionals aged 25–40 in urban areas"
+                />
               </Field>
               <Field label="Top 3 challenges right now (pick up to 3)">
                 <div className="flex flex-wrap gap-2">

@@ -12,6 +12,8 @@ const SaveOnboarding = z.object({
   businessName: z.string().min(1).max(120),
   industry: z.string().min(1).max(120),
   size: z.enum(["solo", "small", "mid", "large", "xlarge"]),
+  primaryOffer: z.string().max(300).default(""),
+  targetCustomer: z.string().max(300).default(""),
   challenges: z.array(z.string().max(60)).max(6),
   goals90d: z.string().max(800).default(""),
   voiceSample: z.string().max(8000).default(""),
@@ -54,6 +56,8 @@ export async function saveOnboarding(input: unknown): Promise<SaveOnboardingResu
     workspace_id: ws.id,
     industry: data.industry,
     size: data.size,
+    primary_offer: data.primaryOffer || null,
+    target_customer: data.targetCustomer || null,
     challenges: data.challenges,
     goals_90d: data.goals90d
   });

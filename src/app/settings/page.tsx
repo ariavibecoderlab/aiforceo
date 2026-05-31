@@ -26,11 +26,13 @@ export default async function SettingsPage() {
     { data: latestPnl },
     { data: ledger },
     { data: convRows },
+    { data: memories },
+    { data: invites },
   ] = await Promise.all([
     getRemainingTokens(workspace.id),
     admin
       .from("workspaces")
-      .select("tier, stripe_customer_id, stripe_subscription_id")
+      .select("tier, stripe_customer_id, stripe_subscription_id, morning_brief_enabled, brief_timezone, brief_hour")
       .eq("id", workspace.id)
       .maybeSingle(),
     admin
@@ -64,6 +66,19 @@ export default async function SettingsPage() {
       .from("conversations")
       .select("id, agent_role")
       .eq("workspace_id", workspace.id),
+    admin
+      .from("agent_memories")
+      .select("id, workspace_id, category, content, importance, source_agent, last_reinforced_at, created_at")
+      .eq("workspace_id", workspace.id)
+      .order("importance", { ascending: false })
+      .order("last_reinforced_at", { ascending: false })
+      .limit(150),
+    admin
+      .from("workspace_invites")
+      .select("id, email, role, accepted_at, created_at, expires_at")
+      .eq("workspace_id", workspace.id)
+      .order("created_at", { ascending: false })
+      .limit(20),
   ]);
 
   const quota = TIER_MONTHLY_TOKENS[workspace.tier] ?? 100_000;
@@ -94,7 +109,7 @@ export default async function SettingsPage() {
 
   return (
     <div
-      className="grid min-h-screen"
+      className="grid min-h-screen app-grid"
       style={{ gridTemplateColumns: "240px 1fr" }}
     >
       <Sidebar
@@ -119,6 +134,11 @@ export default async function SettingsPage() {
           quota={quota}
           stripeCustomerId={wsDetails?.stripe_customer_id ?? null}
           stripeSubscriptionId={wsDetails?.stripe_subscription_id ?? null}
+          briefEnabled={wsDetails?.morning_brief_enabled ?? false}
+          briefTimezone={wsDetails?.brief_timezone ?? "Asia/Kuala_Lumpur"}
+          briefHour={wsDetails?.brief_hour ?? 9}
+          memories={memories ?? []}
+          invites={(invites ?? []) as { id: string; email: string; role: string; accepted_at: string | null; created_at: string; expires_at: string }[]}
           ledger={(ledger ?? []).map((r) => ({
             deltaTokens: r.delta_tokens,
             reason: r.reason,

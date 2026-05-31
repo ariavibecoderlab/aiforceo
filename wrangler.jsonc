@@ -1,12 +1,16 @@
 {
   // Ai4C — The C-Suite by AI · Cloudflare Workers configuration via @opennextjs/cloudflare.
   // The anon Supabase key is public by design and may live here.
-  // The service_role key, ANTHROPIC_API_KEY, STRIPE_SECRET_KEY,
-  // and STRIPE_WEBHOOK_SECRET are stored as secrets:
-  //   pnpm wrangler secret put SUPABASE_SERVICE_ROLE_KEY
-  //   pnpm wrangler secret put ANTHROPIC_API_KEY
-  //   pnpm wrangler secret put STRIPE_SECRET_KEY
-  //   pnpm wrangler secret put STRIPE_WEBHOOK_SECRET
+  // Stripe price IDs are non-secret and live here as plaintext vars.
+  // The following are stored as encrypted secrets (NOT in this file):
+  //   SUPABASE_SERVICE_ROLE_KEY
+  //   ANTHROPIC_API_KEY
+  //   STRIPE_SECRET_KEY
+  //   STRIPE_WEBHOOK_SECRET
+  //   GOOGLE_CLIENT_ID
+  //   GOOGLE_CLIENT_SECRET
+  //   CRON_SECRET  (shared with the boardroom-ai-cron Worker)
+  //   RESEND_API_KEY  (for morning brief + invite emails)
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "boardroom-ai",
   "main": ".open-next/worker.js",

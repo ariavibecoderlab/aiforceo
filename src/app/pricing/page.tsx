@@ -1,5 +1,9 @@
 import Link from "next/link";
-import { createCheckoutSession } from "@/server/actions/billing";
+import {
+  createCheckoutSession,
+  createTopupCheckoutSession,
+} from "@/server/actions/billing";
+import { isStripeConfigured, TOPUP_TOKENS } from "@/lib/stripe";
 
 const TIERS = [
   {
@@ -48,12 +52,29 @@ const TIERS = [
 ] as const;
 
 export default function PricingPage() {
+  const stripeReady = isStripeConfigured();
+
   return (
     <main className="max-w-6xl mx-auto px-6 py-20">
       <Link href="/" className="flex items-center gap-2.5 font-bold mb-12">
         <span className="logo-mark" />
         Ai<span style={{ color: "var(--accent)" }}>4C</span>
       </Link>
+
+      {/* ── Banners ── */}
+      {!stripeReady && (
+        <div
+          className="mb-8 rounded-xl px-5 py-4 text-sm font-medium"
+          style={{
+            background: "rgba(197,165,114,0.1)",
+            border: "1px solid rgba(197,165,114,0.3)",
+            color: "var(--gold)",
+          }}
+        >
+          ⚠ Billing is not yet configured. Plans are displayed for preview only
+          — checkout is not active.
+        </div>
+      )}
 
       <span
         className="inline-block text-xs uppercase tracking-widest font-bold mb-3"
@@ -72,6 +93,7 @@ export default function PricingPage() {
         credits. Top up only if you use more.
       </p>
 
+      {/* ── Subscription plans ── */}
       <div className="grid md:grid-cols-3 gap-5 mt-14">
         {TIERS.map((t) => {
           const featured = "featured" in t && t.featured;
@@ -126,9 +148,13 @@ export default function PricingPage() {
                 <input type="hidden" name="plan" value={t.plan} />
                 <button
                   type="submit"
+                  disabled={!stripeReady}
                   className={`btn w-full justify-center ${featured ? "" : "btn-ghost"}`}
+                  title={
+                    !stripeReady ? "Billing not yet configured" : undefined
+                  }
                 >
-                  Choose {t.name}
+                  {stripeReady ? `Choose ${t.name}` : "Coming soon"}
                 </button>
               </form>
             </div>
@@ -136,13 +162,103 @@ export default function PricingPage() {
         })}
       </div>
 
-      <p className="text-center text-sm text-[var(--muted)] mt-12">
-        Need a Done-For-You setup?{" "}
-        <Link href="/login" className="underline">
-          Contact us
-        </Link>{" "}
-        — starting $5,000.
-      </p>
+      {/* ── Top-up pack ── */}
+      <div
+        className="mt-10 card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+        style={{ border: "1px solid var(--line)", background: "var(--soft)" }}
+      >
+        <div>
+          <p
+            className="text-xs uppercase tracking-widest font-bold mb-1"
+            style={{ color: "var(--muted)" }}
+          >
+            Token Top-up
+          </p>
+          <p className="font-bold text-xl">
+            {(TOPUP_TOKENS / 1000).toFixed(0)}K tokens{" "}
+            <span className="text-sm font-normal text-[var(--muted)]">
+              — one-time, carry forward
+            </span>
+          </p>
+          <p className="text-sm text-[var(--muted)] mt-1">
+            Buy extra tokens any time. Unused top-up tokens never expire.
+          </p>
+        </div>
+        <form action={createTopupCheckoutSession} className="shrink-0">
+          <button
+            type="submit"
+            disabled={!stripeReady}
+            className="btn btn-ghost"
+            title={!stripeReady ? "Billing not yet configured" : undefined}
+          >
+            {stripeReady ? "Buy top-up →" : "Coming soon"}
+          </button>
+        </form>
+      </div>
+
+      {/* Done-For-You tier */}
+      <div
+        className="mt-8 card p-8"
+        style={{
+          background:
+            "linear-gradient(135deg, rgba(197,165,114,0.08), rgba(197,165,114,0.03))",
+          border: "1px solid rgba(197,165,114,0.25)",
+        }}
+      >
+        <div className="flex flex-col md:flex-row md:items-center gap-6 justify-between">
+          <div>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                color: "var(--gold)",
+              }}
+            >
+              Done For You
+            </span>
+            <h3 className="serif text-2xl mt-1 mb-2">
+              We set it all up for you
+            </h3>
+            <p className="text-sm text-[var(--muted)] max-w-lg">
+              Our team personally onboards your business — 60-minute strategy
+              session, full C-suite configuration, custom agent personas, and a
+              30-day check-in. Starting USD 2,000.
+            </p>
+            <ul className="mt-3 space-y-1">
+              {[
+                "White-glove onboarding by our team",
+                "Custom agent personas built for your industry",
+                "Dedicated Slack support channel (30 days)",
+                "Monthly strategy call with Boardroom AI team",
+              ].map((f) => (
+                <li key={f} className="text-sm flex gap-2">
+                  <span style={{ color: "var(--gold)", fontWeight: 700 }}>
+                    ✓
+                  </span>{" "}
+                  {f}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="shrink-0">
+            <a
+              href="mailto:hello@aiforceo.app?subject=Done-For-You%20Inquiry"
+              className="btn"
+              style={{
+                background: "var(--gold)",
+                color: "#0E1726",
+                border: "none",
+                textDecoration: "none",
+                display: "inline-flex",
+              }}
+            >
+              Contact us →
+            </a>
+          </div>
+        </div>
+      </div>
     </main>
   );
 }

@@ -89,18 +89,34 @@ export async function recordUsage(opts: {
   if (error) throw error;
 }
 
-/** Grant the monthly quota for the given tier (called on Stripe renewal). */
+/** Grant the monthly quota for the given tier (called on Stripe renewal).
+ *  Pass stripeInvoiceId to make the grant idempotent: duplicate Stripe event
+ *  deliveries with the same invoice ID are silently skipped. */
 export async function grantMonthlyQuota(
   workspaceId: string,
   tier: string,
+  stripeInvoiceId?: string,
 ): Promise<void> {
   const tokens = TIER_MONTHLY_TOKENS[tier] ?? 0;
   if (tokens <= 0) return;
   const supa = createSupabaseAdminClient();
+
+  // Idempotency: skip if this invoice has already been credited.
+  if (stripeInvoiceId) {
+    const { data: existing } = await supa
+      .from("credit_ledger")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("stripe_invoice_id", stripeInvoiceId)
+      .maybeSingle();
+    if (existing) return;
+  }
+
   const { error } = await supa.from("credit_ledger").insert({
     workspace_id: workspaceId,
     delta_tokens: tokens,
     reason: "monthly_reset",
+    stripe_invoice_id: stripeInvoiceId ?? null,
   });
   if (error) throw error;
 }

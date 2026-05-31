@@ -228,3 +228,54 @@ select.input option {
     box-shadow: 0 0 0 4px rgba(24, 119, 242, 0.25);
   }
 }
+
+/* ─── MOBILE RESPONSIVE ──────────────────────────────────────────────────────*/
+
+/* Defensive: always hide hamburger on desktop even if inline style fails */
+@media (min-width: 769px) {
+  .mobile-menu-btn { display: none !important; }
+  .mobile-backdrop  { display: none !important; }
+}
+
+@media (max-width: 768px) {
+  /* Show hamburger button */
+  .mobile-menu-btn {
+    display: flex !important;
+  }
+
+  /* Show backdrop when sidebar open */
+  body[data-sidebar-open] .mobile-backdrop {
+    display: block !important;
+  }
+
+  /* Slide sidebar in/out */
+  .app-sidebar {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 40;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.4);
+  }
+  body[data-sidebar-open] .app-sidebar {
+    transform: translateX(0);
+  }
+
+  /* Full-width content on mobile */
+  .app-grid {
+    grid-template-columns: 1fr !important;
+    padding-top: 56px; /* space for hamburger */
+  }
+
+  /* Reduce padding on mobile content */
+  .app-main {
+    padding: 16px !important;
+  }
+
+  /* Stack form grids on mobile */
+  .form-grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+}

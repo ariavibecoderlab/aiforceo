@@ -119,7 +119,15 @@ export async function deleteWorkspace(
   const user = await requireUser();
   const admin = createSupabaseAdminClient();
 
-  // Count how many workspaces this user owns
+  // Must own this workspace
+  const { data: ws } = await admin
+    .from("workspaces")
+    .select("id")
+    .eq("id", workspaceId)
+    .eq("owner_id", user.id)
+    .maybeSingle();
+  if (!ws) return { error: "Workspace not found." };
+
   const { count } = await admin
     .from("workspaces")
     .select("id", { count: "exact", head: true })
@@ -129,7 +137,6 @@ export async function deleteWorkspace(
     return { error: "You cannot delete your last workspace." };
   }
 
-  // Verify ownership then delete (cascade is handled by DB foreign keys)
   const { error } = await admin
     .from("workspaces")
     .delete()
@@ -138,10 +145,9 @@ export async function deleteWorkspace(
 
   if (error) return { error: error.message };
 
-  // If the deleted workspace was active, clear the cookie and pick another
+  // If the deleted workspace was active, switch to another one
   const jar = await cookies();
-  const activeId = jar.get(ACTIVE_WS_COOKIE)?.value;
-  if (activeId === workspaceId) {
+  if (jar.get(ACTIVE_WS_COOKIE)?.value === workspaceId) {
     const { data: remaining } = await admin
       .from("workspaces")
       .select("id")
@@ -160,7 +166,7 @@ export async function deleteWorkspace(
     }
   }
 
-  revalidatePath("/workspaces");
+  revalidatePath("/", "layout");
   return {};
 }
 

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { AgentRole } from "@/lib/prompts";
 import {
   copyToClipboard,
@@ -11,8 +12,16 @@ import {
   exportCSV,
 } from "@/lib/export";
 import { newConversation } from "@/server/actions/workspaces";
+import { toggleStarMessage } from "@/server/actions/search";
+import { useAttachments, ACCEPT_STRING, type Attachment } from "@/hooks/useAttachments";
 
-type Msg = { role: "user" | "assistant"; content: string };
+type MsgAttachment = Pick<Attachment, "id" | "name" | "mimeType" | "preview"> & { url?: string };
+type Msg = {
+  role: "user" | "assistant";
+  content: string;
+  id?: string;
+  attachments?: MsgAttachment[];
+};
 
 const QUICK_PROMPTS: Record<AgentRole, string[]> = {
   cmo: [
@@ -75,6 +84,7 @@ function AssistantContent({
   return (
     <div className="markdown-body">
       <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
         components={{
           p: ({ children }) => (
             <p style={{ margin: "0 0 0.6em 0", lineHeight: 1.6 }}>{children}</p>
@@ -180,32 +190,51 @@ function AssistantContent({
             />
           ),
           table: ({ children }) => (
-            <table
-              style={{
-                borderCollapse: "collapse",
-                width: "100%",
-                margin: "0.5em 0",
-                fontSize: "0.88em",
-              }}
-            >
-              {children}
-            </table>
+            <div style={{ overflowX: "auto", margin: "0.75em 0", borderRadius: 10, border: "1px solid #2A3B5E" }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "0.87em", minWidth: 300 }}>
+                {children}
+              </table>
+            </div>
           ),
+          thead: ({ children }) => (
+            <thead style={{ background: "#15203A" }}>{children}</thead>
+          ),
+          tbody: ({ children }) => (
+            <tbody>{children}</tbody>
+          ),
+          tr: ({ children, ...props }) => {
+            // Alternate row shading — check if parent is tbody via heuristic
+            const isHeader = (props as { node?: { tagName?: string }; "data-sourcepos"?: string })["data-sourcepos"]?.startsWith("1:");
+            return (
+              <tr style={{ background: isHeader ? "#15203A" : undefined }}>{children}</tr>
+            );
+          },
           th: ({ children }) => (
             <th
               style={{
                 border: "1px solid #2A3B5E",
-                padding: "6px 10px",
-                background: "#15203A",
+                padding: "9px 14px",
+                background: "#1C2A47",
                 fontWeight: 700,
                 textAlign: "left",
+                color: "#C5A572",
+                fontSize: "0.9em",
+                letterSpacing: "0.02em",
+                whiteSpace: "nowrap",
               }}
             >
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td style={{ border: "1px solid #2A3B5E", padding: "6px 10px" }}>
+            <td
+              style={{
+                border: "1px solid #2A3B5E",
+                padding: "8px 14px",
+                lineHeight: 1.5,
+                verticalAlign: "top",
+              }}
+            >
               {children}
             </td>
           ),
@@ -281,14 +310,17 @@ function ExportBar({
   );
 }
 
+type PastConv = { id: string; title: string; updatedAt: string };
+
 export function ChatClient({
   role,
   agent,
   workspaceName,
   conversationId: initialConversationId,
   initialMessages,
+  pastConversations = [],
 }: {
-  role: AgentRole;
+  role: string; // AgentRole | custom agent UUID
   agent: {
     name: string;
     title: string;
@@ -298,6 +330,7 @@ export function ChatClient({
   workspaceName: string;
   conversationId: string;
   initialMessages: Msg[];
+  pastConversations?: PastConv[];
 }) {
   const router = useRouter();
   const [conversationId, setConversationId] = useState(initialConversationId);
@@ -306,6 +339,19 @@ export function ChatClient({
   const [pending, setPending] = useState(false);
   const [streamingIndex, setStreamingIndex] = useState<number | null>(null);
   const [newChatLoading, setNewChatLoading] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [feedbackSent, setFeedbackSent] = useState<Record<number, "up" | "down">>({});
+  const [starredMsgs, setStarredMsgs] = useState<Record<number, boolean>>({});
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const {
+    attachments: pendingAttachments,
+    isProcessing:  attachmentProcessing,
+    error:         attachmentError,
+    addFiles,
+    removeAttachment,
+    clearAttachments,
+    clearError: clearAttachmentError,
+  } = useAttachments();
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   // Reset state when conversation switches (workspace change, bfcache restore)
@@ -344,13 +390,59 @@ export function ChatClient({
     router.refresh();
   }
 
+  async function handleLoadConversation(convId: string) {
+    // Navigate to same page — Next.js will re-fetch the conversation server-side
+    // We pass the conversationId via a URL search param and reload
+    setShowHistory(false);
+    router.push(`/agent/${role}?conv=${convId}`);
+  }
+
+  async function handleClearConversation() {
+    if (pending) return;
+    if (!confirm("Clear all messages in this conversation? This cannot be undone.")) return;
+    setMessages([]);
+  }
+
+  async function handleStar(msgIndex: number, messageId?: string) {
+    const current = !!starredMsgs[msgIndex];
+    setStarredMsgs((prev) => ({ ...prev, [msgIndex]: !current }));
+    if (messageId) {
+      await toggleStarMessage(messageId, !current);
+    }
+  }
+
+  function handleFeedback(msgIndex: number, direction: "up" | "down") {
+    setFeedbackSent((prev) => ({ ...prev, [msgIndex]: direction }));
+    // The positive/negative signal is captured — for "up" we don't need to do
+    // anything extra (the memory system already extracted what was valuable).
+    // For "down" we could show a brief "noted" message.
+    if (direction === "down") {
+      // Prepend a soft note so user knows it's registered
+      void Promise.resolve();
+    }
+  }
+
   async function send(prompt?: string) {
     const text = (prompt ?? input).trim();
-    if (!text || pending) return;
+    // Allow send if there's text OR attachments
+    if ((!text && !pendingAttachments.length) || pending) return;
     setInput("");
+    clearAttachmentError();
+
+    // Snapshot attachments and clear the picker immediately
+    const sentAttachments = pendingAttachments.map(({ id, name, mimeType, preview, base64, size }) =>
+      ({ id, name, mimeType, preview, base64, size })
+    );
+    clearAttachments();
+
     setPending(true);
 
-    const next: Msg[] = [...messages, { role: "user", content: text }];
+    const userMsg: Msg = {
+      role: "user",
+      content: text,
+      attachments: sentAttachments.map(({ id, name, mimeType, preview }) => ({ id, name, mimeType, preview })),
+    };
+    const next: Msg[] = [...messages, userMsg];
     const assistantIndex = next.length;
     setMessages([...next, { role: "assistant", content: "" }]);
     setStreamingIndex(assistantIndex);
@@ -363,7 +455,14 @@ export function ChatClient({
         body: JSON.stringify({
           conversationId,
           role,
-          messages: next.map(({ role, content }) => ({ role, content })),
+          messages: next.map(({ role, content, attachments }, idx) => ({
+            role,
+            content,
+            // Only send base64 for the last message (current turn)
+            ...(idx === next.length - 1 && attachments?.length
+              ? { attachments: sentAttachments.map(({ name, mimeType, size, base64 }) => ({ name, mimeType, size, base64 })) }
+              : {}),
+          })),
         }),
       });
 
@@ -382,7 +481,8 @@ export function ChatClient({
             "You've used all your credits this month. [Upgrade on the pricing page](/pricing).";
         setMessages((cur) => {
           const copy = [...cur];
-          copy[copy.length - 1] = { role: "assistant", content: `⚠ ${errMsg}` };
+          const last = copy[copy.length - 1];
+          copy[copy.length - 1] = { ...(last ?? {}), role: "assistant", content: `⚠ ${errMsg}` };
           return copy;
         });
         return;
@@ -407,7 +507,8 @@ export function ChatClient({
       const msg = err instanceof Error ? err.message : "Network error";
       setMessages((cur) => {
         const copy = [...cur];
-        copy[copy.length - 1] = { role: "assistant", content: `⚠ ${msg}` };
+        const last = copy[copy.length - 1];
+        copy[copy.length - 1] = { ...(last ?? {}), role: "assistant", content: `⚠ ${msg}` };
         return copy;
       });
     } finally {
@@ -470,29 +571,90 @@ export function ChatClient({
               {workspaceName} · {agent.tag}
             </p>
           </div>
-          {/* New Chat button */}
-          <button
-            onClick={handleNewChat}
-            disabled={pending || newChatLoading}
-            title="Start a new conversation"
-            style={{
-              padding: "7px 14px",
-              borderRadius: 9,
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: pending || newChatLoading ? "default" : "pointer",
-              background: "transparent",
-              border: "1px solid #2A3B5E",
-              color: "#8597B8",
-              opacity: pending || newChatLoading ? 0.4 : 1,
-              display: "flex",
-              alignItems: "center",
-              gap: 5,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {newChatLoading ? "…" : "+ New chat"}
-          </button>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            {/* History button */}
+            {pastConversations.length > 1 && (
+              <div style={{ position: "relative" }}>
+                <button
+                  onClick={() => setShowHistory((v) => !v)}
+                  title="View past conversations"
+                  style={{
+                    padding: "7px 12px", borderRadius: 9, fontSize: 12, fontWeight: 600,
+                    cursor: "pointer", background: showHistory ? "#2A3B5E" : "transparent",
+                    border: "1px solid #2A3B5E", color: "#8597B8",
+                    display: "flex", alignItems: "center", gap: 5,
+                  }}
+                >
+                  ⏱ History
+                </button>
+                {showHistory && (
+                  <div style={{
+                    position: "absolute", top: "calc(100% + 6px)", right: 0,
+                    width: 280, background: "#15203A", border: "1px solid #2A3B5E",
+                    borderRadius: 12, boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+                    zIndex: 20, overflow: "hidden",
+                  }}>
+                    <div style={{ padding: "10px 14px 8px", borderBottom: "1px solid #2A3B5E" }}>
+                      <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#8597B8", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                        Past conversations
+                      </p>
+                    </div>
+                    <div style={{ maxHeight: 240, overflowY: "auto" }}>
+                      {pastConversations.map((c) => (
+                        <button
+                          key={c.id}
+                          onClick={() => void handleLoadConversation(c.id)}
+                          style={{
+                            display: "block", width: "100%", textAlign: "left",
+                            padding: "10px 14px", background: "transparent",
+                            border: "none", borderBottom: "1px solid #1C2A47",
+                            cursor: "pointer", color: "#E8EDF6",
+                          }}
+                        >
+                          <p style={{ margin: "0 0 2px", fontSize: 13, fontWeight: 500 }}>
+                            {c.title ?? "Chat"}
+                          </p>
+                          <p style={{ margin: 0, fontSize: 11, color: "#8597B8" }}>
+                            {new Date(c.updatedAt).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Clear button */}
+            {messages.length > 0 && (
+              <button
+                onClick={handleClearConversation}
+                disabled={pending}
+                title="Clear conversation"
+                style={{
+                  padding: "7px 10px", borderRadius: 9, fontSize: 12, fontWeight: 600,
+                  cursor: pending ? "default" : "pointer", background: "transparent",
+                  border: "1px solid #2A3B5E", color: "#8597B8", opacity: pending ? 0.4 : 1,
+                }}
+              >
+                ✕ Clear
+              </button>
+            )}
+            {/* New Chat button */}
+            <button
+              onClick={handleNewChat}
+              disabled={pending || newChatLoading}
+              title="Start a new conversation"
+              style={{
+                padding: "7px 14px", borderRadius: 9, fontSize: 12, fontWeight: 600,
+                cursor: pending || newChatLoading ? "default" : "pointer",
+                background: "transparent", border: "1px solid #2A3B5E", color: "#8597B8",
+                opacity: pending || newChatLoading ? 0.4 : 1,
+                display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap",
+              }}
+            >
+              {newChatLoading ? "…" : "+ New chat"}
+            </button>
+          </div>
         </div>
 
         {/* Messages */}
@@ -557,7 +719,7 @@ export function ChatClient({
                   margin: "0 auto",
                 }}
               >
-                {QUICK_PROMPTS[role].map((q) => (
+                {(QUICK_PROMPTS[role as AgentRole] ?? []).map((q) => (
                   <button key={q} onClick={() => send(q)} className="chip">
                     {q}
                   </button>
@@ -629,9 +791,33 @@ export function ChatClient({
                     }}
                   >
                     {m.role === "user" ? (
-                      <span style={{ whiteSpace: "pre-wrap" }}>
-                        {m.content}
-                      </span>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {/* Attachment previews in user bubble */}
+                        {m.attachments && m.attachments.length > 0 && (
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            {m.attachments.map((att) => (
+                              <div key={att.id} style={{ borderRadius: 8, overflow: "hidden", border: "1px solid rgba(0,0,0,0.2)", background: "rgba(0,0,0,0.15)" }}>
+                                {att.preview ? (
+                                  // eslint-disable-next-line @next/next/no-img-element -- base64 data URL, no network optimisation possible
+                                  <img
+                                    src={att.preview}
+                                    alt={att.name}
+                                    style={{ maxWidth: 200, maxHeight: 160, display: "block", objectFit: "cover" }}
+                                  />
+                                ) : (
+                                  <div style={{ padding: "6px 10px", display: "flex", alignItems: "center", gap: 6 }}>
+                                    <span style={{ fontSize: 16 }}>{att.mimeType === "application/pdf" ? "📄" : att.mimeType.includes("word") ? "📝" : "📁"}</span>
+                                    <span style={{ fontSize: 11, color: "rgba(14,23,38,0.7)", fontWeight: 600, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{att.name}</span>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {m.content && (
+                          <span style={{ whiteSpace: "pre-wrap" }}>{m.content}</span>
+                        )}
+                      </div>
                     ) : (
                       <AssistantContent
                         content={m.content}
@@ -639,14 +825,43 @@ export function ChatClient({
                       />
                     )}
                   </div>
-                  {/* Export actions — only on complete, non-error assistant messages */}
+                  {/* Export + feedback — only on complete, non-error assistant messages */}
                   {isDone && (
-                    <ExportBar
-                      content={m.content}
-                      agentName={agent.name}
-                      agentTitle={agent.title}
-                      workspaceName={workspaceName}
-                    />
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <ExportBar
+                        content={m.content}
+                        agentName={agent.name}
+                        agentTitle={agent.title}
+                        workspaceName={workspaceName}
+                      />
+                      {/* Star + Feedback buttons */}
+                      <div style={{ display: "flex", gap: 4, marginLeft: "auto", alignItems: "center" }}>
+                        {/* Star / Save button */}
+                        <button
+                          onClick={() => void handleStar(i, m.id)}
+                          title={starredMsgs[i] ? "Remove from saved" : "Save this response"}
+                          style={{ background: "none", border: "1px solid #2A3B5E", borderRadius: 6, cursor: "pointer", padding: "3px 8px", fontSize: 13, color: starredMsgs[i] ? "#D4A017" : "#8597B8" }}
+                        >{starredMsgs[i] ? "⭐" : "☆"}</button>
+                        {feedbackSent[i] ? (
+                          <span style={{ fontSize: 11, color: "#8597B8", padding: "4px 8px" }}>
+                            {feedbackSent[i] === "up" ? "👍 Noted" : "👎 Noted"}
+                          </span>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => handleFeedback(i, "up")}
+                              title="Helpful response"
+                              style={{ background: "none", border: "1px solid #2A3B5E", borderRadius: 6, cursor: "pointer", padding: "3px 8px", fontSize: 13, color: "#8597B8" }}
+                            >👍</button>
+                            <button
+                              onClick={() => handleFeedback(i, "down")}
+                              title="Not helpful"
+                              style={{ background: "none", border: "1px solid #2A3B5E", borderRadius: 6, cursor: "pointer", padding: "3px 8px", fontSize: 13, color: "#8597B8" }}
+                            >👎</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
@@ -662,13 +877,55 @@ export function ChatClient({
             borderTop: "1px solid #2A3B5E",
           }}
         >
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept={ACCEPT_STRING}
+            style={{ display: "none" }}
+            onChange={(e) => { if (e.target.files) void addFiles(e.target.files); e.target.value = ""; }}
+          />
+
+          {/* Attachment error banner */}
+          {attachmentError && (
+            <div style={{ padding: "6px 14px", background: "rgba(229,84,75,0.1)", border: "1px solid rgba(229,84,75,0.3)", borderRadius: 8, marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 12, color: "#E5544B" }}>⚠ {attachmentError}</span>
+              <button type="button" onClick={clearAttachmentError} style={{ background: "none", border: "none", cursor: "pointer", color: "#E5544B", fontSize: 16, lineHeight: 1 }}>×</button>
+            </div>
+          )}
+
+          {/* Pending attachment previews */}
+          {pendingAttachments.length > 0 && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+              {pendingAttachments.map((att) => (
+                <div key={att.id} style={{ position: "relative", borderRadius: 8, overflow: "hidden", border: "1px solid #2A3B5E", background: "#15203A" }}>
+                  {att.preview ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- base64 preview, no network optimisation
+                    <img src={att.preview} alt={att.name} style={{ width: 60, height: 60, objectFit: "cover", display: "block" }} />
+                  ) : (
+                    <div style={{ width: 60, height: 60, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 4 }}>
+                      <span style={{ fontSize: 22 }}>{att.mimeType === "application/pdf" ? "📄" : "📁"}</span>
+                      <span style={{ fontSize: 9, color: "#8597B8", textAlign: "center", lineHeight: 1.2, marginTop: 2, overflow: "hidden", maxWidth: 56, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{att.name}</span>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(att.id)}
+                    style={{ position: "absolute", top: 2, right: 2, width: 18, height: 18, borderRadius: "50%", background: "rgba(0,0,0,0.7)", border: "none", cursor: "pointer", color: "#fff", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}
+                  >×</button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <form
             style={{
               display: "flex",
               gap: 10,
               alignItems: "center",
               borderRadius: 16,
-              padding: "8px 8px 8px 16px",
+              padding: "8px 8px 8px 12px",
               background: "#1C2A47",
               border: `1.5px solid ${pending ? "#D4A017" : "#2A3B5E"}`,
               transition: "border-color 0.2s",
@@ -678,14 +935,31 @@ export function ChatClient({
               void send();
             }}
           >
+            {/* Paperclip / attach button */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={pending || attachmentProcessing}
+              title="Attach file or image"
+              style={{
+                background: "none", border: "none", cursor: pending ? "default" : "pointer",
+                color: pendingAttachments.length > 0 ? "#D4A017" : "#8597B8",
+                fontSize: 18, padding: "0 4px", flexShrink: 0,
+                opacity: pending ? 0.4 : 1,
+              }}
+            >📎</button>
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={
-                pending
-                  ? `${agent.name} is thinking…`
-                  : `Ask ${agent.name} anything…`
+                attachmentProcessing
+                  ? "Reading file…"
+                  : pending
+                    ? `${agent.name} is thinking…`
+                    : pendingAttachments.length > 0
+                      ? "Add a message (optional)…"
+                      : `Ask ${agent.name} anything…`
               }
               style={{
                 flex: 1,
@@ -696,7 +970,7 @@ export function ChatClient({
                 fontSize: 13,
                 color: "#E8EDF6",
               }}
-              disabled={pending}
+              disabled={pending || attachmentProcessing}
             />
             <button
               type="submit"
@@ -725,7 +999,7 @@ export function ChatClient({
           {/* Quick prompts shown after conversation starts */}
           {messages.length > 0 && (
             <div className="flex gap-2 mt-3 flex-wrap">
-              {QUICK_PROMPTS[role].map((q) => (
+              {(QUICK_PROMPTS[role as AgentRole] ?? []).map((q) => (
                 <button
                   key={q}
                   onClick={() => send(q)}

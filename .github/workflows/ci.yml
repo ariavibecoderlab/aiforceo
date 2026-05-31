@@ -1,13 +1,17 @@
-# Boardroom AI · CI pipeline
-# Per SOP §4.4 and §7. Every push and every PR runs:
-#   1. pnpm install --frozen-lockfile
-#   2. pnpm typecheck   (tsc --noEmit clean — no "any" to paper over real errors)
-#   3. pnpm lint        (eslint, configured in eslint.config.mjs)
-#   4. pnpm test        (vitest — see /tests)
-#   5. pnpm build       (Next.js production build)
+# Boardroom AI · CI + Deploy pipeline
+# Per SOP §4.4 and §7.
 #
-# Merge to main is BLOCKED on green CI. Cloudflare Pages auto-deploys main.
-# AI autonomy Level 2 (SOP §11.3) means a human must approve every merge.
+# Every push and PR runs quality gates:
+#   1. pnpm install --frozen-lockfile
+#   2. pnpm typecheck   (tsc --noEmit)
+#   3. pnpm lint        (eslint)
+#   4. pnpm test        (vitest)
+#
+# On push to main ONLY (after quality gates pass):
+#   5. pnpm cf:build    (OpenNext Cloudflare build)
+#   6. pnpm wrangler deploy  (deploy to Cloudflare Workers)
+#
+# AI autonomy Level 2 (SOP §11.3): AI writes code, human approves merge.
 
 name: CI
 
@@ -22,7 +26,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ci:
+  quality:
+    name: Quality gates
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -49,11 +54,35 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Build
-        run: pnpm build
+  deploy:
+    name: Deploy to Cloudflare Workers
+    needs: quality
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22          # Wrangler v4+ requires Node.js ≥ 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build for Cloudflare
+        run: pnpm cf:build
         env:
-          # Stub env vars for the build only.
-          # Real values live in Cloudflare Pages → Settings → Environment Variables.
-          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-stub-anon-key
-          NEXT_PUBLIC_APP_URL: http://localhost:3000
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_APP_URL: https://aiforceo.app
+
+      - name: Deploy to Cloudflare Workers
+        run: pnpm wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

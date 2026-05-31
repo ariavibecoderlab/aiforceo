@@ -119,3 +119,52 @@ export async function updateProfile(input: unknown): Promise<Result> {
   revalidatePath("/", "layout");
   return { ok: true };
 }
+
+const UpdateBriefPrefs = z.object({
+  enabled:  z.boolean(),
+  timezone: z.string().min(1).max(80),
+  hour:     z.number().int().min(0).max(23),
+});
+
+export async function updateBriefPrefs(input: unknown): Promise<Result> {
+  const parsed = UpdateBriefPrefs.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.message };
+  const { enabled, timezone, hour } = parsed.data;
+
+  const user = await requireUser();
+  const ctx  = await getCurrentWorkspace();
+  if (!ctx) return { ok: false, error: "No workspace found" };
+
+  const admin = createSupabaseAdminClient();
+  const { error } = await admin
+    .from("workspaces")
+    .update({
+      morning_brief_enabled: enabled,
+      brief_timezone:        timezone,
+      brief_hour:            hour,
+    })
+    .eq("id",       ctx.workspace.id)
+    .eq("owner_id", user.id);
+
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+/** Delete a single memory row — gated by workspace ownership. */
+export async function deleteMemory(memoryId: string): Promise<Result> {
+  await requireUser();
+  const ctx = await getCurrentWorkspace();
+  if (!ctx) return { ok: false, error: "No workspace found" };
+
+  const admin = createSupabaseAdminClient();
+  const { error } = await admin
+    .from("agent_memories")
+    .delete()
+    .eq("id", memoryId)
+    .eq("workspace_id", ctx.workspace.id); // belt-and-suspenders ownership check
+
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/settings");
+  return { ok: true };
+}

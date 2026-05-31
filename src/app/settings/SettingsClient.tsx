@@ -2,8 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { updateProfile } from "@/server/actions/settings";
-import { createPortalSession } from "@/server/actions/billing";
+import { updateProfile, updateBriefPrefs, deleteMemory } from "@/server/actions/settings";
+import { createPortalSession, createTopupCheckoutSession } from "@/server/actions/billing";
+import { inviteTeamMember, revokeInvite } from "@/server/actions/invites";
+import { setLocale } from "@/server/actions/locale";
+import type { AgentMemory, MemoryCategory } from "@/lib/memory";
 
 /* ─── CONSTANTS ─────────────────────────────────────────────── */
 const CHALLENGES = [
@@ -536,16 +539,23 @@ function BillingTab({
           Need more tokens?
         </h3>
         <p style={{ margin: "0 0 14px", fontSize: 13, color: "var(--muted)" }}>
-          Top-up packs are available in addition to your monthly quota. Unused
-          top-up tokens carry forward.
+          Top-up packs add 200K tokens to your balance. Unused top-up tokens
+          carry forward and never expire.
         </p>
-        <Link
-          href="/pricing"
-          className="btn"
-          style={{ textDecoration: "none", fontSize: 13 }}
-        >
-          View top-up options
-        </Link>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <form action={createTopupCheckoutSession}>
+            <button type="submit" className="btn" style={{ fontSize: 13 }}>
+              Buy 200K tokens →
+            </button>
+          </form>
+          <Link
+            href="/pricing"
+            className="btn btn-ghost"
+            style={{ textDecoration: "none", fontSize: 13 }}
+          >
+            View all plans
+          </Link>
+        </div>
       </div>
 
       {/* Billing history */}
@@ -634,159 +644,105 @@ function BillingTab({
 }
 
 /* ─── TEAM TAB ──────────────────────────────────────────────── */
-function TeamTab({ ownerEmail }: { ownerEmail: string }) {
+type Invite = { id: string; email: string; role: string; accepted_at: string | null; created_at: string; expires_at: string };
+
+function TeamTab({ ownerEmail, invites: initialInvites }: { ownerEmail: string; invites: Invite[] }) {
+  const [invites, setInvites] = useState<Invite[]>(initialInvites);
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<"member" | "manager">("member");
+  const [sending, setSending] = useState(false);
+  const [inviteMsg, setInviteMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault();
+    setSending(true);
+    setInviteMsg(null);
+    const res = await inviteTeamMember({ email, role });
+    setSending(false);
+    if (res.ok) {
+      setInviteMsg({ ok: true, text: `Invite sent to ${email}` });
+      setEmail("");
+    } else {
+      setInviteMsg({ ok: false, text: res.error });
+    }
+  }
+
+  async function handleRevoke(inviteId: string) {
+    if (!confirm("Revoke this invite?")) return;
+    setInvites((iv) => iv.filter((i) => i.id !== inviteId));
+    await revokeInvite(inviteId);
+  }
+
   return (
     <div style={{ display: "grid", gap: 20, maxWidth: 720 }}>
       {/* Owner card */}
       <div className="card" style={{ padding: 24 }}>
-        <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700 }}>
-          Current Members
-        </h3>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-            padding: "12px 14px",
-            background: "var(--soft)",
-            borderRadius: 10,
-          }}
-        >
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: "50%",
-              background: "var(--accent)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 14,
-              fontWeight: 700,
-              color: "#fff",
-              flexShrink: 0,
-            }}
-          >
+        <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700 }}>Current Members</h3>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", background: "var(--soft)", borderRadius: 10 }}>
+          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
             {ownerEmail.charAt(0).toUpperCase()}
           </div>
           <div style={{ flex: 1 }}>
-            <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>
-              {ownerEmail}
-            </p>
-            <p style={{ margin: 0, fontSize: 11, color: "var(--muted)" }}>
-              Owner · Full access
-            </p>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>{ownerEmail}</p>
+            <p style={{ margin: 0, fontSize: 11, color: "var(--muted)" }}>Owner · Full access</p>
           </div>
-          <span
-            style={{
-              padding: "3px 10px",
-              borderRadius: 20,
-              fontSize: 10,
-              fontWeight: 700,
-              background: "rgba(63,185,132,0.12)",
-              color: "#3FB984",
-            }}
-          >
-            OWNER
-          </span>
+          <span style={{ padding: "3px 10px", borderRadius: 20, fontSize: 10, fontWeight: 700, background: "rgba(63,185,132,0.12)", color: "#3FB984" }}>OWNER</span>
         </div>
       </div>
 
-      {/* Invite coming soon */}
-      <div
-        className="card"
-        style={{
-          padding: 28,
-          border: "2px dashed var(--line)",
-          background: "var(--soft)",
-          textAlign: "center",
-        }}
-      >
-        <div style={{ fontSize: 32, marginBottom: 12 }}>👥</div>
-        <h3 style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 700 }}>
-          Team Invites — Coming Soon
-        </h3>
-        <p
-          style={{
-            margin: "0 0 6px",
-            fontSize: 13,
-            color: "var(--muted)",
-            maxWidth: 480,
-            marginInline: "auto",
-            lineHeight: 1.6,
-          }}
-        >
-          Invite team members to view reports and chat with your AI C-Suite.
-          Assign roles — <strong>Viewer</strong>, <strong>Editor</strong>, or{" "}
-          <strong>Manager</strong> — per workspace.
-        </p>
-        <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--muted)" }}>
-          Available on Starter plan and above.
-        </p>
+      {/* Invite form */}
+      <div className="card" style={{ padding: 24 }}>
+        <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700 }}>Invite a Team Member</h3>
+        <form onSubmit={(e) => void handleInvite(e)} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <input
+            type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+            placeholder="colleague@company.com" className="input text-sm"
+            style={{ flex: 2, minWidth: 200 }}
+          />
+          <select value={role} onChange={(e) => setRole(e.target.value as "member" | "manager")}
+            className="input text-sm" style={{ flex: 1, minWidth: 120 }}>
+            <option value="member">Member</option>
+            <option value="manager">Manager</option>
+          </select>
+          <button type="submit" disabled={sending} className="btn text-sm" style={{ whiteSpace: "nowrap" }}>
+            {sending ? "Sending…" : "Send invite"}
+          </button>
+        </form>
+        {inviteMsg && (
+          <p style={{ margin: "10px 0 0", fontSize: 13, fontWeight: 600, color: inviteMsg.ok ? "var(--success)" : "var(--red)" }}>
+            {inviteMsg.ok ? "✓" : "⚠"} {inviteMsg.text}
+          </p>
+        )}
       </div>
 
-      {/* What's coming */}
-      <div className="card" style={{ padding: 20 }}>
-        <h4 style={{ margin: "0 0 12px", fontSize: 13, fontWeight: 700 }}>
-          Planned roles
-        </h4>
-        <div style={{ display: "grid", gap: 10 }}>
-          {[
-            {
-              role: "Manager",
-              desc: "Full access — edit profile, view all dashboards, chat with all AI execs",
-              color: "#7C3AED",
-            },
-            {
-              role: "Editor",
-              desc: "Edit KPIs and chat with AI execs, cannot change billing or team",
-              color: "#0096C7",
-            },
-            {
-              role: "Viewer",
-              desc: "Read-only — view dashboards and conversation history",
-              color: "#3FB984",
-            },
-          ].map(({ role, desc, color }) => (
-            <div
-              key={role}
-              style={{
-                display: "flex",
-                gap: 12,
-                alignItems: "flex-start",
-                padding: "10px 12px",
-                background: "var(--soft)",
-                borderRadius: 8,
-              }}
-            >
-              <span
-                style={{
-                  padding: "3px 10px",
-                  borderRadius: 20,
-                  fontSize: 10,
-                  fontWeight: 700,
-                  background: color + "18",
-                  color,
-                  whiteSpace: "nowrap",
-                  marginTop: 1,
-                }}
-              >
-                {role.toUpperCase()}
-              </span>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 12,
-                  color: "var(--muted)",
-                  lineHeight: 1.5,
-                }}
-              >
-                {desc}
-              </p>
-            </div>
-          ))}
+      {/* Pending invites */}
+      {invites.length > 0 && (
+        <div className="card" style={{ padding: 24 }}>
+          <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700 }}>Pending Invites</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {invites.map((inv) => {
+              const expired = new Date(inv.expires_at) < new Date();
+              const accepted = !!inv.accepted_at;
+              return (
+                <div key={inv.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "var(--soft)", borderRadius: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>{inv.email}</p>
+                    <p style={{ margin: 0, fontSize: 11, color: "var(--muted)" }}>
+                      {inv.role} · {accepted ? "Accepted ✓" : expired ? "Expired" : "Pending"}
+                    </p>
+                  </div>
+                  {!accepted && (
+                    <button onClick={() => void handleRevoke(inv.id)}
+                      className="btn btn-ghost text-xs" style={{ color: "var(--red)" }}>
+                      Revoke
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -803,6 +759,11 @@ export function SettingsClient({
   usageByAgent,
   ownerEmail,
   initial,
+  briefEnabled,
+  briefTimezone,
+  briefHour,
+  memories: initialMemories,
+  invites: initialInvites = [],
 }: {
   workspaceId: string;
   tier: string;
@@ -814,14 +775,30 @@ export function SettingsClient({
   usageByAgent: AgentUsage[];
   ownerEmail: string;
   initial: Initial;
+  briefEnabled: boolean;
+  briefTimezone: string;
+  briefHour: number;
+  memories: AgentMemory[];
+  invites?: Invite[];
 }) {
   const [form, setForm] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<
-    "profile" | "voice" | "financials" | "usage" | "billing" | "team"
+    "profile" | "voice" | "financials" | "usage" | "billing" | "team" | "notifications" | "memory" | "language"
   >("profile");
+
+  // AI Memory state
+  const [memories, setMemories] = useState<AgentMemory[]>(initialMemories);
+  const [memoryFilter, setMemoryFilter] = useState<MemoryCategory | "all">("all");
+
+  // Morning brief state
+  const [briefOn,  setBriefOn]  = useState(briefEnabled);
+  const [briefTz,  setBriefTz]  = useState(briefTimezone);
+  const [briefHr,  setBriefHr]  = useState(briefHour);
+  const [briefSaving,  setBriefSaving]  = useState(false);
+  const [briefSaved,   setBriefSaved]   = useState(false);
 
   function field(k: keyof typeof form) {
     return (
@@ -856,15 +833,31 @@ export function SettingsClient({
     }
   }
 
+  async function handleDeleteMemory(id: string) {
+    setMemories((m) => m.filter((x) => x.id !== id)); // optimistic
+    await deleteMemory(id);
+  }
+
+  async function saveBriefPrefs() {
+    setBriefSaving(true);
+    setBriefSaved(false);
+    const res = await updateBriefPrefs({ enabled: briefOn, timezone: briefTz, hour: briefHr });
+    setBriefSaving(false);
+    if (res.ok) { setBriefSaved(true); setTimeout(() => setBriefSaved(false), 3000); }
+  }
+
   const isProfileTab = ["profile", "voice", "financials"].includes(activeTab);
 
   const TABS: Array<{ key: typeof activeTab; label: string }> = [
-    { key: "profile", label: "Company Profile" },
-    { key: "voice", label: "Brand Voice" },
-    { key: "financials", label: "Financials" },
-    { key: "usage", label: "Usage" },
-    { key: "billing", label: "Billing" },
-    { key: "team", label: "Team" },
+    { key: "profile",       label: "Company Profile" },
+    { key: "voice",         label: "Brand Voice" },
+    { key: "financials",    label: "Financials" },
+    { key: "usage",         label: "Usage" },
+    { key: "billing",       label: "Billing" },
+    { key: "team",          label: "Team" },
+    { key: "notifications", label: "Notifications" },
+    { key: "memory",        label: "AI Memory" },
+    { key: "language",      label: "Language" },
   ];
 
   const tabStyle = (t: typeof activeTab): React.CSSProperties => ({
@@ -1121,7 +1114,281 @@ export function SettingsClient({
       )}
 
       {/* ── Team tab ── */}
-      {activeTab === "team" && <TeamTab ownerEmail={ownerEmail} />}
+      {activeTab === "team" && <TeamTab ownerEmail={ownerEmail} invites={initialInvites} />}
+
+      {/* ── Notifications tab ── */}
+      {activeTab === "notifications" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          <div className="card" style={{ padding: 28 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Morning Brief</h2>
+                <p style={{ margin: "6px 0 0", fontSize: 13, color: "var(--muted)", maxWidth: 480 }}>
+                  Aria generates a daily executive summary covering all 5 functional areas —
+                  marketing, operations, finance, strategy, and technology — and saves it to your
+                  Aria chat each morning.
+                </p>
+              </div>
+              {/* Toggle */}
+              <button
+                type="button"
+                onClick={() => setBriefOn((v) => !v)}
+                style={{
+                  width: 48, height: 28, borderRadius: 14,
+                  background: briefOn ? "var(--accent)" : "var(--line)",
+                  border: "none", cursor: "pointer", position: "relative",
+                  transition: "background 0.2s", flexShrink: 0,
+                }}
+              >
+                <span style={{
+                  position: "absolute", top: 4,
+                  left: briefOn ? 24 : 4,
+                  width: 20, height: 20, borderRadius: "50%",
+                  background: "#fff",
+                  transition: "left 0.2s",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                }} />
+              </button>
+            </div>
+
+            {briefOn && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      Delivery time
+                    </label>
+                    <select
+                      className="input"
+                      value={briefHr}
+                      onChange={(e) => setBriefHr(Number(e.target.value))}
+                    >
+                      {Array.from({ length: 24 }, (_, i) => {
+                        const label = i === 0 ? "12:00 AM (midnight)" : i < 12 ? `${i}:00 AM` : i === 12 ? "12:00 PM (noon)" : `${i - 12}:00 PM`;
+                        return <option key={i} value={i}>{label}</option>;
+                      })}
+                    </select>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      Timezone
+                    </label>
+                    <select
+                      className="input"
+                      value={briefTz}
+                      onChange={(e) => setBriefTz(e.target.value)}
+                    >
+                      <option value="Asia/Kuala_Lumpur">Kuala Lumpur (MYT, UTC+8)</option>
+                      <option value="Asia/Singapore">Singapore (SGT, UTC+8)</option>
+                      <option value="Asia/Jakarta">Jakarta (WIB, UTC+7)</option>
+                      <option value="Asia/Bangkok">Bangkok (ICT, UTC+7)</option>
+                      <option value="Asia/Dubai">Dubai (GST, UTC+4)</option>
+                      <option value="Asia/Riyadh">Riyadh (AST, UTC+3)</option>
+                      <option value="Europe/London">London (GMT/BST)</option>
+                      <option value="America/New_York">New York (ET)</option>
+                      <option value="America/Los_Angeles">Los Angeles (PT)</option>
+                      <option value="UTC">UTC</option>
+                    </select>
+                  </div>
+                </div>
+                <p style={{ fontSize: 12, color: "var(--muted)", margin: 0 }}>
+                  Aria will save your brief to the Aria chat every morning at the time above.
+                  Open Aria at any time to read it.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button className="btn btn-primary" onClick={saveBriefPrefs} disabled={briefSaving}>
+              {briefSaving ? "Saving…" : "Save notification settings"}
+            </button>
+            {briefSaved && (
+              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--success)" }}>
+                ✓ Saved
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── AI Memory tab ── */}
+      {activeTab === "memory" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          <div>
+            <h2 style={{ margin: "0 0 6px", fontSize: 18, fontWeight: 700 }}>AI Memory</h2>
+            <p style={{ margin: 0, fontSize: 13, color: "var(--muted)", maxWidth: 520 }}>
+              Facts your AI executives have learned about your business from your conversations.
+              These are automatically injected into every chat so your agents always remember context.
+            </p>
+          </div>
+
+          {/* Category filter */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {(["all", "business_fact", "decision", "preference", "concern", "milestone"] as const).map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setMemoryFilter(cat)}
+                style={{
+                  padding: "5px 14px",
+                  borderRadius: 20,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  border: "1px solid var(--line)",
+                  cursor: "pointer",
+                  background: memoryFilter === cat ? "var(--accent)" : "var(--soft)",
+                  color: memoryFilter === cat ? "#0E1726" : "var(--muted)",
+                }}
+              >
+                {cat === "all" ? "All" :
+                 cat === "business_fact" ? "Business Facts" :
+                 cat === "decision" ? "Decisions" :
+                 cat === "preference" ? "Preferences" :
+                 cat === "concern" ? "Concerns" : "Milestones"}
+              </button>
+            ))}
+          </div>
+
+          {/* Memory cards */}
+          {(() => {
+            const CATEGORY_COLOR: Record<string, string> = {
+              business_fact: "#0096C7",
+              decision:      "#C5A572",
+              preference:    "#7C3AED",
+              concern:       "#F96167",
+              milestone:     "#3FB984",
+            };
+            const CATEGORY_LABEL: Record<string, string> = {
+              business_fact: "Business Fact",
+              decision:      "Decision",
+              preference:    "Preference",
+              concern:       "Concern",
+              milestone:     "Milestone",
+            };
+            const filtered = memoryFilter === "all"
+              ? memories
+              : memories.filter((m) => m.category === memoryFilter);
+
+            if (filtered.length === 0) {
+              return (
+                <div className="card" style={{ padding: 32, textAlign: "center" }}>
+                  <p style={{ margin: 0, fontSize: 14, color: "var(--muted)" }}>
+                    {memories.length === 0
+                      ? "Your AI executives haven't learned anything yet. Start chatting and they'll begin remembering important facts about your business."
+                      : `No ${CATEGORY_LABEL[memoryFilter] ?? memoryFilter} memories yet.`}
+                  </p>
+                </div>
+              );
+            }
+
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {filtered.map((mem) => (
+                  <div
+                    key={mem.id}
+                    className="card"
+                    style={{
+                      padding: "14px 16px",
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 12,
+                    }}
+                  >
+                    {/* Category badge */}
+                    <span style={{
+                      flexShrink: 0,
+                      padding: "2px 10px",
+                      borderRadius: 20,
+                      fontSize: 10,
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      background: `${CATEGORY_COLOR[mem.category] ?? "#888"}22`,
+                      color: CATEGORY_COLOR[mem.category] ?? "#888",
+                      border: `1px solid ${CATEGORY_COLOR[mem.category] ?? "#888"}44`,
+                      marginTop: 2,
+                    }}>
+                      {CATEGORY_LABEL[mem.category] ?? mem.category}
+                    </span>
+                    {/* Content */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5 }}>{mem.content}</p>
+                      <p style={{ margin: "3px 0 0", fontSize: 11, color: "var(--muted)" }}>
+                        {"●".repeat(mem.importance)}{"○".repeat(3 - mem.importance)} importance
+                        {" · "}
+                        {new Date(mem.last_reinforced_at).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}
+                        {mem.source_agent ? ` · via ${mem.source_agent.toUpperCase()}` : ""}
+                      </p>
+                    </div>
+                    {/* Delete */}
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteMemory(mem.id)}
+                      title="Delete memory"
+                      style={{
+                        flexShrink: 0,
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "var(--muted)",
+                        fontSize: 16,
+                        padding: "2px 4px",
+                        lineHeight: 1,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
+          <p style={{ fontSize: 12, color: "var(--muted)", margin: 0 }}>
+            {memories.length} memor{memories.length === 1 ? "y" : "ies"} stored · max 150 per workspace
+          </p>
+        </div>
+      )}
+
+      {/* ── Language tab ── */}
+      {activeTab === "language" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 480 }}>
+          <div>
+            <h2 style={{ margin: "0 0 6px", fontSize: 18, fontWeight: 700 }}>Language</h2>
+            <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>
+              Choose the language for the Boardroom AI interface.
+            </p>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {[
+              { code: "en", label: "English", native: "English" },
+              { code: "ms", label: "Bahasa Malaysia", native: "Bahasa Malaysia" },
+            ].map((lang) => (
+              <form key={lang.code} action={setLocale.bind(null, lang.code as "en" | "ms")}>
+                <button
+                  type="submit"
+                  style={{
+                    width: "100%", textAlign: "left", padding: "14px 18px",
+                    borderRadius: 12, border: "1px solid var(--line)",
+                    background: "var(--soft)", cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: 14,
+                  }}
+                >
+                  <span style={{ fontSize: 24 }}>{lang.code === "en" ? "🇬🇧" : "🇲🇾"}</span>
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>{lang.label}</p>
+                    <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>{lang.native}</p>
+                  </div>
+                </button>
+              </form>
+            ))}
+          </div>
+          <p style={{ fontSize: 12, color: "var(--muted)", margin: 0 }}>
+            More languages coming soon — Español, العربية, 中文.
+          </p>
+        </div>
+      )}
 
       {/* Save bar — only for profile/voice/financials */}
       {isProfileTab && (

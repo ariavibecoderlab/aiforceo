@@ -88,6 +88,12 @@ export type BuildPromptContext = {
    * access URLs" — instead it guides the user to fix the connector.
    */
   sheetsHint?: string;
+  /** Memories extracted from past conversations — injected between profile and brand voice. */
+  memories?: ReadonlyArray<{
+    category: string;
+    content: string;
+    importance: number;
+  }>;
 };
 
 export function buildSystemPrompt(
@@ -130,9 +136,23 @@ export function buildSystemPrompt(
         ].join("\n")
       : "";
 
-  return [SHARED_GUARDRAILS, profile, voice, connectorSection, PERSONAS[role]]
+  const memorySection = buildMemorySection(ctx.memories);
+
+  return [SHARED_GUARDRAILS, profile, memorySection, voice, connectorSection, PERSONAS[role]]
     .filter(Boolean)
     .join("\n\n");
+}
+
+function buildMemorySection(
+  memories: BuildPromptContext["memories"],
+): string {
+  if (!memories || memories.length === 0) return "";
+  const lines = memories.map((m) => `- [${m.category}] ${m.content}`);
+  return [
+    "== What I remember about this business ==",
+    ...lines,
+    "(Reference these facts naturally when relevant. Do not mention that you have a memory system.)",
+  ].join("\n");
 }
 
 const PERSONAS: Record<AgentRole, string> = {

@@ -13,20 +13,69 @@ import { getAnthropic, ANTHROPIC_MODEL } from "@/lib/anthropic";
 import { buildSystemPrompt, type AgentRole } from "@/lib/prompts";
 import { getRemainingTokens, recordUsage } from "@/lib/credits";
 import { buildSheetsContext, fetchSheetByUrl } from "@/lib/google-sheets";
+import { loadMemories, extractAndSaveMemories } from "@/lib/memory";
+import { uploadAttachmentsToStorage } from "@/lib/attachments";
+import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
+
+const BUILTIN_ROLES = ["cmo", "coo", "cfo", "ceo", "cto", "aria"] as const;
+
+// ── Attachment schema ───────────────────────────────────────────────────────
+const AttachmentSchema = z.object({
+  name:     z.string().max(255),
+  mimeType: z.string().max(100),
+  size:     z.number().int().min(1).max(10 * 1024 * 1024), // 10 MB
+  base64:   z.string().max(15_000_000),                     // ~10 MB base64
+});
+
+type ReqAttachment = z.infer<typeof AttachmentSchema>;
 
 const RequestSchema = z.object({
   conversationId: z.string().uuid(),
-  role: z.enum(["cmo", "coo", "cfo", "ceo", "cto", "aria"]),
+  // Built-in roles OR custom agent UUID
+  role: z.string().min(3),
   messages: z
     .array(
       z.object({
-        role: z.enum(["user", "assistant"]),
-        content: z.string().min(1).max(8000),
+        role:        z.enum(["user", "assistant"]),
+        content:     z.string().min(0).max(8000), // 0 allowed when attachments are present
+        attachments: z.array(AttachmentSchema).max(5).optional(),
       }),
     )
     .min(1)
     .max(40),
 });
+
+// ── Build Anthropic content blocks ─────────────────────────────────────────
+function buildContentBlocks(
+  text: string,
+  attachments: ReqAttachment[] | undefined,
+): MessageParam["content"] {
+  if (!attachments?.length) return text || " ";
+
+  const blocks: NonNullable<MessageParam["content"]> = [];
+
+  for (const att of attachments) {
+    if (att.mimeType.startsWith("image/")) {
+      const mediaType = att.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+      blocks.push({
+        type:   "image",
+        source: { type: "base64", media_type: mediaType, data: att.base64 },
+      });
+    } else if (att.mimeType === "application/pdf") {
+      blocks.push({
+        type:   "document",
+        source: { type: "base64", media_type: "application/pdf", data: att.base64 },
+      });
+    } else {
+      // TXT / CSV / DOCX → decode as UTF-8 text and inject as labelled text block
+      const decoded = Buffer.from(att.base64, "base64").toString("utf-8").slice(0, 50_000);
+      blocks.push({ type: "text", text: `[File: ${att.name}]\n${decoded}` });
+    }
+  }
+
+  if (text.trim()) blocks.push({ type: "text", text });
+  return blocks;
+}
 
 function makeJson(body: object, status: number) {
   return new Response(JSON.stringify(body), {
@@ -104,7 +153,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       /https:\/\/docs\.google\.com\/spreadsheets\/d\/[a-zA-Z0-9-_]+[^\s]*/,
     )?.[0] ?? null;
 
-  const [{ data: profile }, { data: voice }, sheetsCtx, urlSheetCtx] =
+  const [{ data: profile }, { data: voice }, sheetsCtx, urlSheetCtx, memories] =
     await Promise.all([
       admin
         .from("business_profiles")
@@ -124,6 +173,8 @@ export async function POST(req: NextRequest): Promise<Response> {
       sheetsUrlMatch
         ? fetchSheetByUrl(workspace.id, sheetsUrlMatch).catch(() => null)
         : Promise.resolve(null),
+      // Agent memories — fast indexed read, non-fatal
+      loadMemories(workspace.id, 12).catch(() => []),
     ]);
 
   // URL-pasted sheet leads; pre-configured sheet fills in context below it.
@@ -145,7 +196,34 @@ export async function POST(req: NextRequest): Promise<Response> {
         "(2) Copy the spreadsheet contents and paste the raw data directly into this chat."
       : undefined;
 
-  const system = buildSystemPrompt(role as AgentRole, {
+  // For custom agents (UUID role), load the agent's system prompt override
+  let customAgentSystemPrompt: string | null = null;
+  const isCustomRole = !BUILTIN_ROLES.includes(role as typeof BUILTIN_ROLES[number]);
+  if (isCustomRole) {
+    const { data: customAgent } = await admin
+      .from("custom_agents")
+      .select("system_prompt, name, title")
+      .eq("id", role)
+      .eq("workspace_id", workspace.id)
+      .maybeSingle();
+    customAgentSystemPrompt = customAgent?.system_prompt ?? null;
+    if (!customAgentSystemPrompt) return makeJson({ error: "Custom agent not found." }, 404);
+  }
+
+  // For custom agents: build the system prompt inline from their stored prompt.
+  // For built-in roles: use the standard buildSystemPrompt() with full context.
+  const finalSystem = customAgentSystemPrompt
+    ? [
+        customAgentSystemPrompt,
+        `\n\n== Business profile ==\nName: ${workspace.name}`,
+        profile?.industry ? `Industry: ${profile.industry}` : "",
+        voice?.voice_summary ? `\n\n== Brand voice ==\n${voice.voice_summary}` : "",
+        memories.length > 0
+          ? `\n\n== What I remember about this business ==\n${memories.map(m => `- [${m.category}] ${m.content}`).join("\n")}`
+          : "",
+        connectorData ? `\n\n${connectorData}` : "",
+      ].filter(Boolean).join("\n")
+    : buildSystemPrompt(role as AgentRole, {
     businessName: workspace.name,
     industry: profile?.industry ?? undefined,
     size: profile?.size ?? undefined,
@@ -159,15 +237,20 @@ export async function POST(req: NextRequest): Promise<Response> {
     wordsToAvoid: voice?.words_to_avoid ?? [],
     connectorData,
     sheetsHint,
+    memories,
   });
 
   // 7. Persist the user message before streaming
   await admin.from("messages").insert({
     conversation_id: conversationId,
-    workspace_id: workspace.id,
-    role: "user",
-    content: lastUser.content,
-    model: ANTHROPIC_MODEL,
+    workspace_id:    workspace.id,
+    role:            "user",
+    content:         lastUser.content,
+    model:           ANTHROPIC_MODEL,
+    // Store attachment metadata (without base64) — URLs backfilled by background upload
+    attachments: (lastUser.attachments ?? []).map(({ name, mimeType, size }) => ({
+      name, mimeType, size, url: "",
+    })),
   });
 
   // 8. Stream from Anthropic, persist assistant message + usage when done
@@ -182,10 +265,16 @@ export async function POST(req: NextRequest): Promise<Response> {
 
       try {
         const anthropicStream = anthropic.messages.stream({
-          model: ANTHROPIC_MODEL,
+          model:      ANTHROPIC_MODEL,
           max_tokens: 1500,
-          system,
-          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          system:     finalSystem,
+          // Last user message uses content blocks (text + image/doc); history is plain strings
+          messages: messages.map((m, idx) => ({
+            role:    m.role,
+            content: (idx === messages.length - 1 && m.role === "user")
+              ? buildContentBlocks(m.content, m.attachments)
+              : (m.content || " "),
+          })),
         });
 
         for await (const event of anthropicStream) {
@@ -229,6 +318,23 @@ export async function POST(req: NextRequest): Promise<Response> {
           inputTokens,
           outputTokens,
           messageId: aMsg?.id,
+        });
+
+        // Upload attachments to Supabase Storage — fire-and-forget
+        if (lastUser.attachments?.length && aMsg?.id) {
+          void uploadAttachmentsToStorage({
+            workspaceId: workspace.id,
+            messageId:   aMsg.id,
+            attachments: lastUser.attachments,
+          });
+        }
+
+        // Extract and persist memories — fire-and-forget, never blocks the stream
+        void extractAndSaveMemories({
+          workspaceId:      workspace.id,
+          agentRole:        role,
+          userMessage:      lastUser.content,
+          assistantMessage: fullText,
         });
 
         // Update conversation title from first user message

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AGENTS, type AgentRole } from "@/lib/prompts";
 import { CreditMeter } from "./CreditMeter";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { MobileSidebarToggle } from "./MobileSidebarToggle";
 import { signOut } from "@/server/actions/auth";
 import type { WorkspaceStub } from "@/lib/workspace";
 
@@ -12,6 +13,9 @@ type ActivePage =
   | "settings"
   | "autopilot"
   | "investor-pack"
+  | "agents"
+  | "search"
+  | "saved"
   | AgentRole;
 
 const ROLES: AgentRole[] = ["aria", "cmo", "coo", "cfo", "ceo", "cto"];
@@ -43,202 +47,215 @@ export function Sidebar({
   allWorkspaces?: WorkspaceStub[];
 }) {
   return (
-    <aside
-      style={{
-        width: 240,
-        minHeight: "100vh",
-        background: D.bg,
-        borderRight: `1px solid ${D.line}`,
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      {/* Logo */}
-      <div
+    <>
+      <MobileSidebarToggle />
+      <aside
+        className="app-sidebar"
         style={{
-          padding: "16px 14px 14px",
-          borderBottom: `1px solid ${D.line}`,
+          width: 240,
+          minHeight: "100vh",
+          background: D.bg,
+          borderRight: `1px solid ${D.line}`,
+          display: "flex",
+          flexDirection: "column",
         }}
       >
-        <Link
-          href="/dashboard"
+        {/* Logo */}
+        <div
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 9,
-            fontWeight: 700,
-            fontSize: 15,
-            textDecoration: "none",
-            color: D.text,
+            padding: "16px 14px 14px",
+            borderBottom: `1px solid ${D.line}`,
           }}
         >
-          <span className="logo-mark" />
-          AI<span style={{ color: D.gold }}>for</span>CEO
-        </Link>
-        {workspaceName && (
-          <div style={{ marginTop: 8 }}>
-            {workspaceId && allWorkspaces.length > 1 ? (
-              <WorkspaceSwitcher
-                activeId={workspaceId}
-                workspaces={allWorkspaces}
-              />
-            ) : (
-              <div
-                style={{
-                  padding: "5px 8px",
-                  background: D.panel2,
-                  borderRadius: 7,
-                  border: `1px solid ${D.line}`,
-                }}
-              >
-                <p
-                  style={{
-                    fontSize: 10,
-                    color: D.gold,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    fontWeight: 700,
-                    letterSpacing: "0.05em",
-                    textTransform: "uppercase",
-                    margin: 0,
-                  }}
-                >
-                  {workspaceName}
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: "10px 8px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 14,
-        }}
-      >
-        {/* Main nav */}
-        <Section title="Main">
-          <Item href="/dashboard" active={active === "dashboard"} icon="⌂">
-            Dashboard
-          </Item>
-          <Item href="/workspaces" active={active === "workspaces"} icon="◫">
-            Workspaces
-            {allWorkspaces.length > 1 && (
-              <span
-                style={{
-                  marginLeft: "auto",
-                  fontSize: 10,
-                  fontWeight: 700,
-                  background: D.gold,
-                  color: D.bg,
-                  borderRadius: 20,
-                  padding: "1px 7px",
-                }}
-              >
-                {allWorkspaces.length}
-              </span>
-            )}
-          </Item>
-          <Item href="/connectors" active={active === "connectors"} icon="⊕">
-            Connectors
-          </Item>
-          <Item href="/settings" active={active === "settings"} icon="⚙">
-            Settings
-          </Item>
-          <Item href="/autopilot" active={active === "autopilot"} icon="⚡">
-            Autopilot
-          </Item>
-          <Item
-            href="/reports/investor-pack"
-            active={active === "investor-pack"}
-            icon="📊"
-          >
-            Investor Pack
-          </Item>
-        </Section>
-
-        {/* AI C-Suite */}
-        <Section title="Command Executives">
-          {ROLES.map((r) => (
-            <Item
-              key={r}
-              href={`/agent/${r}`}
-              active={active === r}
-              iconRole={r}
-            >
-              {AGENTS[r].name}
-              <span
-                style={{
-                  fontSize: 10,
-                  color: active === r ? "rgba(14,23,38,0.55)" : D.dim,
-                  marginLeft: 3,
-                  fontWeight: 400,
-                }}
-              >
-                {AGENTS[r].title.replace("AI ", "")}
-              </span>
-            </Item>
-          ))}
-        </Section>
-      </div>
-
-      {/* Credit meter + sign out */}
-      <div
-        style={{
-          padding: "10px 8px",
-          borderTop: `1px solid ${D.line}`,
-          display: "flex",
-          flexDirection: "column",
-          gap: 6,
-        }}
-      >
-        <CreditMeter remaining={remainingTokens} quota={monthlyQuota} />
-        <form action={signOut}>
-          <button
-            type="submit"
+          <Link
+            href="/dashboard"
             style={{
-              width: "100%",
-              padding: "8px 10px",
-              borderRadius: 10,
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: "pointer",
-              background: "transparent",
-              border: `1px solid ${D.line}`,
-              color: D.dim,
-              textAlign: "left",
               display: "flex",
               alignItems: "center",
-              gap: 8,
+              gap: 9,
+              fontWeight: 700,
+              fontSize: 15,
+              textDecoration: "none",
+              color: D.text,
             }}
           >
-            <span
+            <span className="logo-mark" />
+            AI<span style={{ color: D.gold }}>for</span>CEO
+          </Link>
+          {workspaceName && (
+            <div style={{ marginTop: 8 }}>
+              {workspaceId && allWorkspaces.length > 1 ? (
+                <WorkspaceSwitcher
+                  activeId={workspaceId}
+                  workspaces={allWorkspaces}
+                />
+              ) : (
+                <div
+                  style={{
+                    padding: "5px 8px",
+                    background: D.panel2,
+                    borderRadius: 7,
+                    border: `1px solid ${D.line}`,
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: 10,
+                      color: D.gold,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      fontWeight: 700,
+                      letterSpacing: "0.05em",
+                      textTransform: "uppercase",
+                      margin: 0,
+                    }}
+                  >
+                    {workspaceName}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            padding: "10px 8px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 14,
+          }}
+        >
+          {/* Main nav */}
+          <Section title="Main">
+            <Item href="/dashboard" active={active === "dashboard"} icon="⌂">
+              Dashboard
+            </Item>
+            <Item href="/agents" active={active === "agents"} icon="🤖">
+              Agents
+            </Item>
+            <Item href="/search" active={active === "search"} icon="🔍">
+              Search
+            </Item>
+            <Item href="/saved" active={active === "saved"} icon="⭐">
+              Saved
+            </Item>
+            <Item href="/workspaces" active={active === "workspaces"} icon="◫">
+              Workspaces
+              {allWorkspaces.length > 1 && (
+                <span
+                  style={{
+                    marginLeft: "auto",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    background: D.gold,
+                    color: D.bg,
+                    borderRadius: 20,
+                    padding: "1px 7px",
+                  }}
+                >
+                  {allWorkspaces.length}
+                </span>
+              )}
+            </Item>
+            <Item href="/connectors" active={active === "connectors"} icon="⊕">
+              Connectors
+            </Item>
+            <Item href="/settings" active={active === "settings"} icon="⚙">
+              Settings
+            </Item>
+            <Item href="/autopilot" active={active === "autopilot"} icon="⚡">
+              Autopilot
+            </Item>
+            <Item
+              href="/reports/investor-pack"
+              active={active === "investor-pack"}
+              icon="📊"
+            >
+              Investor Pack
+            </Item>
+          </Section>
+
+          {/* AI C-Suite */}
+          <Section title="Command Executives">
+            {ROLES.map((r) => (
+              <Item
+                key={r}
+                href={`/agent/${r}`}
+                active={active === r}
+                iconRole={r}
+              >
+                {AGENTS[r].name}
+                <span
+                  style={{
+                    fontSize: 10,
+                    color: active === r ? "rgba(14,23,38,0.55)" : D.dim,
+                    marginLeft: 3,
+                    fontWeight: 400,
+                  }}
+                >
+                  {AGENTS[r].title.replace("AI ", "")}
+                </span>
+              </Item>
+            ))}
+          </Section>
+        </div>
+
+        {/* Credit meter + sign out */}
+        <div
+          style={{
+            padding: "10px 8px",
+            borderTop: `1px solid ${D.line}`,
+            display: "flex",
+            flexDirection: "column",
+            gap: 6,
+          }}
+        >
+          <CreditMeter remaining={remainingTokens} quota={monthlyQuota} />
+          <form action={signOut}>
+            <button
+              type="submit"
               style={{
-                width: 22,
-                height: 22,
-                borderRadius: 7,
-                flexShrink: 0,
+                width: "100%",
+                padding: "8px 10px",
+                borderRadius: 10,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                background: "transparent",
+                border: `1px solid ${D.line}`,
+                color: D.dim,
+                textAlign: "left",
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center",
-                fontSize: 11,
-                background: D.panel2,
-                color: D.dim,
+                gap: 8,
               }}
             >
-              ↩
-            </span>
-            Sign out
-          </button>
-        </form>
-      </div>
-    </aside>
+              <span
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: 7,
+                  flexShrink: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 11,
+                  background: D.panel2,
+                  color: D.dim,
+                }}
+              >
+                ↩
+              </span>
+              Sign out
+            </button>
+          </form>
+        </div>
+      </aside>
+    </>
   );
 }
 
