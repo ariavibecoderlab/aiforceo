@@ -8,35 +8,40 @@
    Dark command-centre palette (matches Dashboard.jsx)
    ─────────────────────────────────────────────────────────────────────────── */
 :root {
-  /* Background layers */
-  --bg:     #0E1726;   /* page background */
-  --panel:  #15203A;   /* card / panel background */
-  --panel2: #1C2A47;   /* nested stat block */
-  --soft:   #1C2A47;   /* alias for panel2 */
+  /* Background layers — Facebook dark palette */
+  --bg: #18191a; /* Facebook dark background */
+  --panel: #242526; /* Facebook card surface */
+  --panel2: #3a3b3c; /* Facebook nested surface */
+  --soft: #3a3b3c; /* alias for panel2 */
 
   /* Borders */
-  --line:   #2A3B5E;
+  --line: #3e4042; /* Facebook divider */
 
   /* Text */
-  --ink:    #E8EDF6;   /* primary text (light on dark) */
-  --muted:  #8597B8;   /* secondary / dim text */
+  --ink: #e4e6eb; /* Facebook primary text */
+  --muted: #b0b3b8; /* Facebook secondary text */
 
-  /* Brand accents */
-  --accent: #D4A017;   /* gold — primary CTA */
-  --gold:   #D4A017;
-  --copper: #C97B3A;
-  --primary:#2E7DD1;   /* blue */
+  /* Brand accents — Facebook blue */
+  --accent: #1877f2; /* Facebook blue — primary CTA */
+  --gold: #1877f2; /* alias kept for legacy usage */
+  --copper: #166fe5; /* slightly deeper FB blue */
+  --primary: #1877f2; /* unified primary */
 
   /* Status */
-  --success:#3FB984;
-  --red:    #E5544B;
-  --amber:  #E5A93C;
+  --success: #3fb984;
+  --red: #e5544b;
+  --amber: #e5a93c;
 }
 
-html, body {
+html,
+body {
   background: var(--bg);
   color: var(--ink);
-  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  font-family:
+    "Inter",
+    system-ui,
+    -apple-system,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -59,13 +64,16 @@ html, body {
   border: none;
   white-space: nowrap;
 }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
-/* Gold primary — dark text on gold */
+/* Facebook blue — white text on blue */
 .btn-primary,
 .btn {
   background: var(--accent);
-  color: #0E1726;
+  color: #fff;
 }
 .btn-primary:hover,
 .btn:hover:not(.btn-ghost):not(:disabled) {
@@ -91,7 +99,9 @@ html, body {
   color: #fff;
 }
 .btn-danger:hover:not(:disabled),
-.btn-accent:hover:not(:disabled) { filter: brightness(1.1); }
+.btn-accent:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
 
 /* ─── INPUTS ────────────────────────────────────────────────────────────────*/
 .input {
@@ -105,9 +115,18 @@ html, body {
   outline: none;
   transition: border-color 0.15s;
 }
-.input::placeholder { color: var(--muted); opacity: 0.8; }
-.input:focus { border-color: var(--gold); }
-textarea.input { min-height: 80px; resize: vertical; font-family: inherit; }
+.input::placeholder {
+  color: var(--muted);
+  opacity: 0.8;
+}
+.input:focus {
+  border-color: var(--gold);
+}
+textarea.input {
+  min-height: 80px;
+  resize: vertical;
+  font-family: inherit;
+}
 
 select.input option {
   background: var(--panel);
@@ -134,8 +153,15 @@ select.input option {
   cursor: pointer;
   transition: all 0.15s;
 }
-.chip:hover { border-color: var(--gold); color: var(--gold); }
-.chip.selected { background: var(--gold); color: #0E1726; border-color: var(--gold); }
+.chip:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.chip.selected {
+  background: var(--gold);
+  color: #fff;
+  border-color: var(--gold);
+}
 
 /* ─── LOGO MARK ─────────────────────────────────────────────────────────────*/
 .logo-mark {
@@ -152,23 +178,53 @@ select.input option {
 .logo-mark::after {
   content: "";
   position: absolute;
-  background: #0E1726;
+  background: #fff;
   width: 6px;
   height: 6px;
   border-radius: 2px;
 }
-.logo-mark::before { left: 5px; top: 5px; }
-.logo-mark::after  { right: 5px; bottom: 5px; background: #fff; }
+.logo-mark::before {
+  left: 5px;
+  top: 5px;
+}
+.logo-mark::after {
+  right: 5px;
+  bottom: 5px;
+  background: #fff;
+}
 
 /* ─── SCROLLBARS ─────────────────────────────────────────────────────────────*/
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--panel); }
-::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--panel);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
 
 /* ─── ANIMATIONS ─────────────────────────────────────────────────────────────*/
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
 @keyframes pulse-gold {
-  0%,100% { box-shadow: 0 0 0 0 rgba(212,160,23,0); }
-  50%      { box-shadow: 0 0 0 4px rgba(212,160,23,0.25); }
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(24, 119, 242, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(24, 119, 242, 0.25);
+  }
 }

@@ -5,6 +5,9 @@ import { getRemainingTokens, TIER_MONTHLY_TOKENS } from "@/lib/credits";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/auth/require";
 import { switchWorkspace, createWorkspace } from "@/server/actions/workspaces";
+import { listMembers } from "@/server/actions/team";
+import { WorkspaceTeamPanel } from "./WorkspaceTeamPanel";
+import { WorkspaceActions } from "./WorkspaceActions";
 import Link from "next/link";
 
 const TIER_LABEL: Record<string, string> = {
@@ -74,6 +77,13 @@ export default async function WorkspacesPage() {
     {},
   );
 
+  // Team members per workspace (fetched in parallel)
+  const membersByWs = Object.fromEntries(
+    await Promise.all(
+      wsIds.map(async (id) => [id, await listMembers(id)] as const),
+    ),
+  );
+
   return (
     <div
       className="grid min-h-screen"
@@ -117,24 +127,13 @@ export default async function WorkspacesPage() {
                 }}
               >
                 <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="serif text-xl">{ws.name}</h3>
-                      {isActive && (
-                        <span
-                          style={{
-                            fontSize: 10,
-                            fontWeight: 700,
-                            padding: "2px 8px",
-                            borderRadius: 20,
-                            background: "var(--accent)",
-                            color: "#fff",
-                          }}
-                        >
-                          ACTIVE
-                        </span>
-                      )}
-                    </div>
+                  <div className="flex-1 min-w-0 mr-3">
+                    <WorkspaceActions
+                      workspaceId={ws.id}
+                      name={ws.name}
+                      isActive={isActive}
+                      isOnly={(allWorkspaces ?? []).length <= 1}
+                    />
                     <p className="text-xs text-[var(--muted)] mt-0.5">
                       Created{" "}
                       {new Date(ws.created_at).toLocaleDateString("en-US", {
@@ -208,6 +207,12 @@ export default async function WorkspacesPage() {
                     </Link>
                   )}
                 </div>
+
+                {/* Team members panel */}
+                <WorkspaceTeamPanel
+                  workspaceId={ws.id}
+                  initialMembers={membersByWs[ws.id] ?? []}
+                />
               </div>
             );
           })}

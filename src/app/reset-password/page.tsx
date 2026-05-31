@@ -41,7 +41,7 @@ export default function ResetPasswordPage() {
         <Link href="/" className="flex items-center gap-2.5 mb-6">
           <span className="logo-mark" />
           <span className="font-bold text-lg">
-            Boardroom <span style={{ color: "var(--accent)" }}>AI</span>
+            Ai<span style={{ color: "var(--accent)" }}>4C</span>
           </span>
         </Link>
 
@@ -67,7 +67,11 @@ export default function ResetPasswordPage() {
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
           />
-          {error && <p className="text-sm" style={{ color: "var(--red)" }}>{error}</p>}
+          {error && (
+            <p className="text-sm" style={{ color: "var(--red)" }}>
+              {error}
+            </p>
+          )}
           <button
             type="submit"
             disabled={loading}

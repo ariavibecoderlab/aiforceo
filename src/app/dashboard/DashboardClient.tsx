@@ -28,6 +28,8 @@ const C = {
   text: "#E8EDF6",
   dim: "#8597B8",
   blue: "#2E7DD1",
+  pink: "#F96167",
+  teal: "#2A9D8F",
 };
 
 /* ─── TYPES ──────────────────────────────────────────────────── */
@@ -236,7 +238,7 @@ function defaultKPI(): WorkspaceKPI {
 /* ─── LOCALSTORAGE ───────────────────────────────────────────── */
 function loadKPILocal(wsId: string): WorkspaceKPI | null {
   try {
-    const raw = localStorage.getItem(`boardroom_kpi_${wsId}`);
+    const raw = localStorage.getItem(`ai4c_kpi_${wsId}`);
     return raw ? (JSON.parse(raw) as WorkspaceKPI) : null;
   } catch {
     return null;
@@ -244,7 +246,7 @@ function loadKPILocal(wsId: string): WorkspaceKPI | null {
 }
 function saveKPILocal(wsId: string, kpi: WorkspaceKPI) {
   try {
-    localStorage.setItem(`boardroom_kpi_${wsId}`, JSON.stringify(kpi));
+    localStorage.setItem(`ai4c_kpi_${wsId}`, JSON.stringify(kpi));
   } catch {
     /* ignore */
   }
@@ -582,7 +584,7 @@ function CEOView({
       </div>
 
       {/* AI Platform stats */}
-      <Panel title="Boardroom AI — Your C-Suite Activity" accent={C.gold}>
+      <Panel title="AIforCEO — Command Executive Activity" accent={C.gold}>
         <div
           style={{
             display: "grid",
@@ -1142,6 +1144,119 @@ type GroupEntry = {
   kpi: WorkspaceKPI | null;
 };
 
+type GroupTab = "financial" | "marketing" | "operations";
+
+function CompanyCell({
+  ws,
+  activeId,
+}: {
+  ws: { id: string; name: string; tier: string };
+  activeId: string;
+}) {
+  const isActive = ws.id === activeId;
+  return (
+    <td style={{ padding: "12px", color: C.text }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: "50%",
+            background: TIER_COLOR[ws.tier] ?? C.dim,
+            flexShrink: 0,
+          }}
+        />
+        <span style={{ fontWeight: isActive ? 700 : 500 }}>{ws.name}</span>
+        {isActive && (
+          <span
+            style={{
+              fontSize: 9,
+              fontWeight: 700,
+              padding: "2px 6px",
+              borderRadius: 10,
+              background: C.gold,
+              color: C.ink,
+            }}
+          >
+            ACTIVE
+          </span>
+        )}
+      </div>
+    </td>
+  );
+}
+
+function SwitchCell({
+  ws,
+  activeId,
+}: {
+  ws: { id: string; name: string; tier: string };
+  activeId: string;
+}) {
+  if (ws.id === activeId) return <td />;
+  return (
+    <td style={{ padding: "12px", textAlign: "right" }}>
+      <form action={switchWorkspace}>
+        <input type="hidden" name="workspace_id" value={ws.id} />
+        <button
+          type="submit"
+          style={{
+            padding: "6px 12px",
+            borderRadius: 7,
+            background: C.panel2,
+            color: C.dim,
+            border: `1px solid ${C.line}`,
+            fontSize: 11,
+            fontWeight: 700,
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+          }}
+        >
+          Switch →
+        </button>
+      </form>
+    </td>
+  );
+}
+
+function GroupTable({
+  headers,
+  rows,
+}: {
+  headers: string[];
+  rows: React.ReactNode[];
+}) {
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table
+        style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}
+      >
+        <thead>
+          <tr>
+            {headers.map((h, i) => (
+              <th
+                key={i}
+                style={{
+                  textAlign: i === 0 ? "left" : "right",
+                  padding: "8px 12px",
+                  color: C.dim,
+                  fontWeight: 600,
+                  fontSize: 11,
+                  letterSpacing: "0.05em",
+                  textTransform: "uppercase",
+                }}
+              >
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>{rows}</tbody>
+      </table>
+    </div>
+  );
+}
+
 function GroupView({
   entries,
   activeId,
@@ -1149,47 +1264,107 @@ function GroupView({
   entries: GroupEntry[];
   activeId: string;
 }) {
-  const rows = entries.map(({ ws, kpi }) => {
-    if (!kpi)
-      return {
-        ws,
-        sales: null,
-        gpPct: null,
-        ebitda: null,
-        cashBalance: null,
-        runway: null,
-      };
-    const d = compute(kpi.periods.MTD);
-    return {
-      ws,
-      sales: d.sales,
-      gpPct: d.gpPct,
-      ebitda: d.ebitda,
-      cashBalance: kpi.finance.cashBalance,
-      runway: kpi.finance.runwayMonths,
-    };
+  const [tab, setTab] = useState<GroupTab>("financial");
+
+  /* ── precompute all row data ── */
+  const allRows = entries.map(({ ws, kpi }) => {
+    const d = kpi ? compute(kpi.periods.MTD) : null;
+
+    // Financial
+    const fin = d
+      ? {
+          sales: d.sales,
+          gpPct: d.gpPct,
+          ebitda: d.ebitda,
+          cashBalance: kpi!.finance.cashBalance,
+          runway: kpi!.finance.runwayMonths,
+        }
+      : null;
+
+    // Marketing (aggregate channels)
+    const mktChannels = kpi?.marketing ?? [];
+    const mktProspects = mktChannels.reduce((a, c) => a + c.prospects, 0);
+    const mktSpend = mktChannels.reduce((a, c) => a + c.cost, 0);
+    const mktCustomers = mktChannels.reduce((a, c) => a + c.customers, 0);
+    const mktCAC = mktCustomers > 0 ? mktSpend / mktCustomers : 0;
+    const mktConvRate = mktProspects > 0 ? mktCustomers / mktProspects : 0;
+    const bestChannel =
+      mktChannels.length > 0
+        ? mktChannels.reduce((a, b) => (b.customers > a.customers ? b : a)).name
+        : "—";
+    const mkt = kpi
+      ? {
+          mktProspects,
+          mktSpend,
+          mktCustomers,
+          mktCAC,
+          mktConvRate,
+          bestChannel,
+        }
+      : null;
+
+    // Operations
+    const ops = kpi
+      ? {
+          headcount: kpi.ops.headcount,
+          nps: kpi.ops.nps,
+          csat: kpi.ops.csat,
+          onTimeDelivery: kpi.ops.onTimeDelivery,
+          capacityUsed: kpi.ops.capacityUsed,
+          repeatRate: kpi.ops.repeatRate,
+        }
+      : null;
+
+    return { ws, fin, mkt, ops };
   });
 
-  const totalRevenue = rows.reduce((a, r) => a + (r.sales ?? 0), 0);
-  const totalEbitda = rows.reduce((a, r) => a + (r.ebitda ?? 0), 0);
-  const profitable = rows.filter(
-    (r) => r.ebitda !== null && r.ebitda >= 0,
+  /* ── summary strip values ── */
+  const totalRevenue = allRows.reduce((a, r) => a + (r.fin?.sales ?? 0), 0);
+  const totalEbitda = allRows.reduce((a, r) => a + (r.fin?.ebitda ?? 0), 0);
+  const profitable = allRows.filter(
+    (r) => r.fin !== null && r.fin.ebitda >= 0,
   ).length;
+  const totalProspects = allRows.reduce(
+    (a, r) => a + (r.mkt?.mktProspects ?? 0),
+    0,
+  );
+  const totalMktSpend = allRows.reduce((a, r) => a + (r.mkt?.mktSpend ?? 0), 0);
+  const totalHeadcount = allRows.reduce(
+    (a, r) => a + (r.ops?.headcount ?? 0),
+    0,
+  );
+  const avgNPS =
+    allRows.filter((r) => r.ops).length > 0
+      ? allRows.reduce((a, r) => a + (r.ops?.nps ?? 0), 0) /
+        allRows.filter((r) => r.ops).length
+      : 0;
+
+  const tabStyle = (t: GroupTab): React.CSSProperties => ({
+    padding: "6px 16px",
+    borderRadius: 20,
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: "pointer",
+    border: "none",
+    background: tab === t ? C.gold : C.panel2,
+    color: tab === t ? C.ink : C.dim,
+    transition: "background 0.15s",
+  });
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      {/* Group summary strip */}
+      {/* Summary strip */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))",
+          gridTemplateColumns: "repeat(auto-fill,minmax(155px,1fr))",
           gap: 12,
         }}
       >
         <Stat
-          label="Total Group Revenue"
+          label="Group Revenue MTD"
           value={rm(totalRevenue)}
-          sub="MTD across all companies"
+          sub="All companies combined"
         />
         <Stat
           label="Group EBITDA"
@@ -1197,208 +1372,362 @@ function GroupView({
           tone={totalEbitda >= 0 ? "good" : "bad"}
         />
         <Stat
-          label="Profitable Companies"
-          value={`${profitable} / ${rows.filter((r) => r.ebitda !== null).length}`}
+          label="Profitable"
+          value={`${profitable} / ${allRows.filter((r) => r.fin).length}`}
           tone={
-            profitable === rows.filter((r) => r.ebitda !== null).length
-              ? "good"
-              : "warn"
+            profitable === allRows.filter((r) => r.fin).length ? "good" : "warn"
           }
+        />
+        <Stat label="Total Prospects" value={num(totalProspects)} sub="MTD" />
+        <Stat label="Mktg Spend" value={rm(totalMktSpend)} sub="MTD" />
+        <Stat
+          label="Group Headcount"
+          value={num(totalHeadcount)}
+          sub="All companies"
+        />
+        <Stat
+          label="Avg NPS"
+          value={avgNPS.toFixed(0)}
+          tone={avgNPS >= 50 ? "good" : avgNPS >= 30 ? "warn" : "bad"}
         />
         <Stat label="Companies" value={String(entries.length)} />
       </div>
 
-      {/* Comparison table */}
-      <Panel title="Group Company Comparison — MTD" accent={C.gold}>
-        <div style={{ overflowX: "auto" }}>
-          <table
-            style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}
-          >
-            <thead>
-              <tr>
-                {[
-                  "Company",
-                  "Revenue",
-                  "GP %",
-                  "EBITDA",
-                  "Cash",
-                  "Runway",
-                  "",
-                ].map((h, i) => (
-                  <th
-                    key={i}
-                    style={{
-                      textAlign: i === 0 ? "left" : "right",
-                      padding: "8px 12px",
-                      color: C.dim,
-                      fontWeight: 600,
-                      fontSize: 11,
-                      letterSpacing: "0.05em",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(({ ws, sales, gpPct, ebitda, cashBalance, runway }) => {
-                const isActive = ws.id === activeId;
-                const noData = sales === null;
-                return (
-                  <tr
-                    key={ws.id}
-                    style={{
-                      borderTop: `1px solid ${C.line}`,
-                      background: isActive
-                        ? "rgba(212,160,23,0.06)"
-                        : "transparent",
-                    }}
-                  >
-                    {/* Company name */}
-                    <td style={{ padding: "12px", color: C.text }}>
-                      <div
+      {/* Tab switcher */}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          style={tabStyle("financial")}
+          onClick={() => setTab("financial")}
+        >
+          💰 Financial
+        </button>
+        <button
+          style={tabStyle("marketing")}
+          onClick={() => setTab("marketing")}
+        >
+          📣 Marketing
+        </button>
+        <button
+          style={tabStyle("operations")}
+          onClick={() => setTab("operations")}
+        >
+          ⚙️ Operations
+        </button>
+      </div>
+
+      {/* ── FINANCIAL TAB ── */}
+      {tab === "financial" && (
+        <Panel title="Financial Comparison — MTD" accent={C.gold}>
+          <GroupTable
+            headers={[
+              "Company",
+              "Revenue",
+              "GP %",
+              "EBITDA",
+              "Cash",
+              "Runway",
+              "",
+            ]}
+            rows={allRows.map(({ ws, fin }) => {
+              const isActive = ws.id === activeId;
+              return (
+                <tr
+                  key={ws.id}
+                  style={{
+                    borderTop: `1px solid ${C.line}`,
+                    background: isActive
+                      ? "rgba(212,160,23,0.06)"
+                      : "transparent",
+                  }}
+                >
+                  <CompanyCell ws={ws} activeId={activeId} />
+                  {!fin ? (
+                    <td
+                      colSpan={5}
+                      style={{ padding: "12px", color: C.dim, fontSize: 12 }}
+                    >
+                      No KPI data —{" "}
+                      <Link href="/settings" style={{ color: C.gold }}>
+                        set up KPIs
+                      </Link>
+                    </td>
+                  ) : (
+                    <>
+                      <td
                         style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
+                          padding: "12px",
+                          textAlign: "right",
+                          fontWeight: 600,
                         }}
                       >
-                        <div
-                          style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: "50%",
-                            background: TIER_COLOR[ws.tier] ?? C.dim,
-                            flexShrink: 0,
-                          }}
-                        />
-                        <span style={{ fontWeight: isActive ? 700 : 500 }}>
-                          {ws.name}
-                        </span>
-                        {isActive && (
-                          <span
-                            style={{
-                              fontSize: 9,
-                              fontWeight: 700,
-                              padding: "2px 6px",
-                              borderRadius: 10,
-                              background: C.gold,
-                              color: C.ink,
-                            }}
-                          >
-                            ACTIVE
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Metrics or "no data" placeholder */}
-                    {noData ? (
-                      <td
-                        colSpan={5}
-                        style={{ padding: "12px", color: C.dim, fontSize: 12 }}
-                      >
-                        No KPI data —{" "}
-                        <Link href="/settings" style={{ color: C.gold }}>
-                          set up KPIs
-                        </Link>
+                        {rm(fin.sales)}
                       </td>
-                    ) : (
-                      <>
-                        <td
-                          style={{
-                            padding: "12px",
-                            textAlign: "right",
-                            color: C.text,
-                            fontWeight: 600,
-                          }}
-                        >
-                          {rm(sales!)}
-                        </td>
-                        <td
-                          style={{
-                            padding: "12px",
-                            textAlign: "right",
-                            color: C.text,
-                          }}
-                        >
-                          {pct(gpPct!)}
-                        </td>
-                        <td
-                          style={{
-                            padding: "12px",
-                            textAlign: "right",
-                            color: ebitda! >= 0 ? C.green : C.red,
-                            fontWeight: 700,
-                          }}
-                        >
-                          {rm(ebitda!)}
-                        </td>
-                        <td
-                          style={{
-                            padding: "12px",
-                            textAlign: "right",
-                            color: C.text,
-                          }}
-                        >
-                          {rm(cashBalance!)}
-                        </td>
-                        <td
-                          style={{
-                            padding: "12px",
-                            textAlign: "right",
-                            color:
-                              runway! > 3
-                                ? C.green
-                                : runway! > 1
-                                  ? C.amber
-                                  : C.red,
-                          }}
-                        >
-                          {runway!.toFixed(1)}mo
-                        </td>
-                      </>
-                    )}
+                      <td style={{ padding: "12px", textAlign: "right" }}>
+                        {pct(fin.gpPct)}
+                      </td>
+                      <td
+                        style={{
+                          padding: "12px",
+                          textAlign: "right",
+                          color: fin.ebitda >= 0 ? C.green : C.red,
+                          fontWeight: 700,
+                        }}
+                      >
+                        {rm(fin.ebitda)}
+                      </td>
+                      <td style={{ padding: "12px", textAlign: "right" }}>
+                        {rm(fin.cashBalance)}
+                      </td>
+                      <td
+                        style={{
+                          padding: "12px",
+                          textAlign: "right",
+                          color:
+                            fin.runway > 3
+                              ? C.green
+                              : fin.runway > 1
+                                ? C.amber
+                                : C.red,
+                        }}
+                      >
+                        {fin.runway.toFixed(1)}mo
+                      </td>
+                    </>
+                  )}
+                  <SwitchCell ws={ws} activeId={activeId} />
+                </tr>
+              );
+            })}
+          />
+        </Panel>
+      )}
 
-                    {/* Switch button */}
-                    <td style={{ padding: "12px", textAlign: "right" }}>
-                      {!isActive && (
-                        <form action={switchWorkspace}>
-                          <input
-                            type="hidden"
-                            name="workspace_id"
-                            value={ws.id}
-                          />
-                          <button
-                            type="submit"
-                            style={{
-                              padding: "6px 12px",
-                              borderRadius: 7,
-                              background: C.panel2,
-                              color: C.dim,
-                              border: `1px solid ${C.line}`,
-                              fontSize: 11,
-                              fontWeight: 700,
-                              cursor: "pointer",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            Switch →
-                          </button>
-                        </form>
-                      )}
+      {/* ── MARKETING TAB ── */}
+      {tab === "marketing" && (
+        <Panel title="Marketing Comparison — MTD" accent={C.pink}>
+          <GroupTable
+            headers={[
+              "Company",
+              "Prospects",
+              "Customers",
+              "Conv %",
+              "Spend",
+              "CAC",
+              "Best Channel",
+              "",
+            ]}
+            rows={allRows.map(({ ws, mkt }) => {
+              const isActive = ws.id === activeId;
+              return (
+                <tr
+                  key={ws.id}
+                  style={{
+                    borderTop: `1px solid ${C.line}`,
+                    background: isActive
+                      ? "rgba(212,160,23,0.06)"
+                      : "transparent",
+                  }}
+                >
+                  <CompanyCell ws={ws} activeId={activeId} />
+                  {!mkt ? (
+                    <td
+                      colSpan={6}
+                      style={{ padding: "12px", color: C.dim, fontSize: 12 }}
+                    >
+                      No KPI data —{" "}
+                      <Link href="/settings" style={{ color: C.gold }}>
+                        set up KPIs
+                      </Link>
                     </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
+                  ) : (
+                    <>
+                      <td style={{ padding: "12px", textAlign: "right" }}>
+                        {num(mkt.mktProspects)}
+                      </td>
+                      <td
+                        style={{
+                          padding: "12px",
+                          textAlign: "right",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {num(mkt.mktCustomers)}
+                      </td>
+                      <td
+                        style={{
+                          padding: "12px",
+                          textAlign: "right",
+                          color:
+                            mkt.mktConvRate >= 0.2
+                              ? C.green
+                              : mkt.mktConvRate >= 0.1
+                                ? C.amber
+                                : C.red,
+                        }}
+                      >
+                        {(mkt.mktConvRate * 100).toFixed(1)}%
+                      </td>
+                      <td style={{ padding: "12px", textAlign: "right" }}>
+                        {rm(mkt.mktSpend)}
+                      </td>
+                      <td
+                        style={{
+                          padding: "12px",
+                          textAlign: "right",
+                          color:
+                            mkt.mktCAC < 200
+                              ? C.green
+                              : mkt.mktCAC < 500
+                                ? C.amber
+                                : C.red,
+                        }}
+                      >
+                        {rm(mkt.mktCAC)}
+                      </td>
+                      <td
+                        style={{
+                          padding: "12px",
+                          textAlign: "right",
+                          color: C.dim,
+                          fontSize: 12,
+                        }}
+                      >
+                        {mkt.bestChannel}
+                      </td>
+                    </>
+                  )}
+                  <SwitchCell ws={ws} activeId={activeId} />
+                </tr>
+              );
+            })}
+          />
+        </Panel>
+      )}
 
-      {/* Company cards */}
+      {/* ── OPERATIONS TAB ── */}
+      {tab === "operations" && (
+        <Panel title="Operations Comparison" accent={C.teal}>
+          <GroupTable
+            headers={[
+              "Company",
+              "Headcount",
+              "NPS",
+              "CSAT",
+              "On-Time",
+              "Capacity",
+              "Repeat Rate",
+              "",
+            ]}
+            rows={allRows.map(({ ws, ops }) => {
+              const isActive = ws.id === activeId;
+              return (
+                <tr
+                  key={ws.id}
+                  style={{
+                    borderTop: `1px solid ${C.line}`,
+                    background: isActive
+                      ? "rgba(212,160,23,0.06)"
+                      : "transparent",
+                  }}
+                >
+                  <CompanyCell ws={ws} activeId={activeId} />
+                  {!ops ? (
+                    <td
+                      colSpan={6}
+                      style={{ padding: "12px", color: C.dim, fontSize: 12 }}
+                    >
+                      No KPI data —{" "}
+                      <Link href="/settings" style={{ color: C.gold }}>
+                        set up KPIs
+                      </Link>
+                    </td>
+                  ) : (
+                    <>
+                      <td style={{ padding: "12px", textAlign: "right" }}>
+                        {num(ops.headcount)}
+                      </td>
+                      <td
+                        style={{
+                          padding: "12px",
+                          textAlign: "right",
+                          fontWeight: 700,
+                          color:
+                            ops.nps >= 50
+                              ? C.green
+                              : ops.nps >= 30
+                                ? C.amber
+                                : C.red,
+                        }}
+                      >
+                        {ops.nps}
+                      </td>
+                      <td
+                        style={{
+                          padding: "12px",
+                          textAlign: "right",
+                          color:
+                            ops.csat >= 4.5
+                              ? C.green
+                              : ops.csat >= 3.5
+                                ? C.amber
+                                : C.red,
+                        }}
+                      >
+                        {ops.csat.toFixed(1)} / 5
+                      </td>
+                      <td
+                        style={{
+                          padding: "12px",
+                          textAlign: "right",
+                          color:
+                            ops.onTimeDelivery >= 0.9
+                              ? C.green
+                              : ops.onTimeDelivery >= 0.75
+                                ? C.amber
+                                : C.red,
+                        }}
+                      >
+                        {(ops.onTimeDelivery * 100).toFixed(0)}%
+                      </td>
+                      <td
+                        style={{
+                          padding: "12px",
+                          textAlign: "right",
+                          color:
+                            ops.capacityUsed <= 0.8
+                              ? C.green
+                              : ops.capacityUsed <= 0.95
+                                ? C.amber
+                                : C.red,
+                        }}
+                      >
+                        {(ops.capacityUsed * 100).toFixed(0)}%
+                      </td>
+                      <td
+                        style={{
+                          padding: "12px",
+                          textAlign: "right",
+                          color:
+                            ops.repeatRate >= 0.4
+                              ? C.green
+                              : ops.repeatRate >= 0.2
+                                ? C.amber
+                                : C.red,
+                        }}
+                      >
+                        {(ops.repeatRate * 100).toFixed(0)}%
+                      </td>
+                    </>
+                  )}
+                  <SwitchCell ws={ws} activeId={activeId} />
+                </tr>
+              );
+            })}
+          />
+        </Panel>
+      )}
+
+      {/* Company mini-cards (financial quick view) */}
       <div
         style={{
           display: "grid",
@@ -1406,9 +1735,9 @@ function GroupView({
           gap: 12,
         }}
       >
-        {rows
-          .filter((r) => r.sales !== null)
-          .map(({ ws, sales, gpPct, ebitda }) => (
+        {allRows
+          .filter((r) => r.fin !== null)
+          .map(({ ws, fin, mkt, ops }) => (
             <div
               key={ws.id}
               style={{
@@ -1446,24 +1775,34 @@ function GroupView({
                   color: C.text,
                 }}
               >
-                {rm(sales!)}
+                {rm(fin!.sales)}
               </div>
               <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>
                 Revenue MTD
               </div>
               <div style={{ fontSize: 12, marginTop: 4, color: C.dim }}>
-                GP: {pct(gpPct!)}
+                GP: {pct(fin!.gpPct)}
               </div>
               <div
                 style={{
                   fontSize: 13,
                   fontWeight: 700,
-                  color: ebitda! >= 0 ? C.green : C.red,
+                  color: fin!.ebitda >= 0 ? C.green : C.red,
                   marginTop: 6,
                 }}
               >
-                EBITDA {rm(ebitda!)}
+                EBITDA {rm(fin!.ebitda)}
               </div>
+              {mkt && (
+                <div style={{ fontSize: 11, color: C.dim, marginTop: 4 }}>
+                  {num(mkt.mktProspects)} prospects · CAC {rm(mkt.mktCAC)}
+                </div>
+              )}
+              {ops && (
+                <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>
+                  {num(ops.headcount)} staff · NPS {ops.nps}
+                </div>
+              )}
             </div>
           ))}
       </div>

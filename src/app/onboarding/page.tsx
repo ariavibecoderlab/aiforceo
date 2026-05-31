@@ -131,19 +131,19 @@ export default function OnboardingPage() {
         <div className="flex items-center gap-2.5">
           <span className="logo-mark" style={{ background: "#fff" }} />
           <span className="font-bold text-lg">
-            Boardroom <span style={{ color: "var(--accent)" }}>AI</span>
+            AI<span style={{ color: "var(--accent)" }}>for</span>CEO
           </span>
         </div>
         <div>
           <h1 className="serif text-5xl leading-tight">
-            Let&apos;s build your{" "}
+            Let&apos;s deploy your{" "}
             <em style={{ color: "var(--gold)", fontStyle: "italic" }}>
-              AI executive team.
+              C-Suite.
             </em>
           </h1>
           <p className="mt-4 text-white/70 text-lg max-w-md">
-            Five minutes. By the end of this, your AI C-suite will know your
-            business, your voice, and your goals.
+            Under 30 minutes. Your six Command Executives will be briefed on
+            your business, your voice, and your 90-day mission.
           </p>
         </div>
         <div>

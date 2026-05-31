@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/require-admin";
 
-export default async function AdminLayout({ children }: { children: React.ReactNode }): Promise<React.ReactElement> {
+export default async function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}): Promise<React.ReactElement> {
   await requireAdmin();
 
   return (
@@ -11,14 +15,19 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         className="flex flex-col gap-6 p-5 shrink-0"
         style={{ width: 200, background: "var(--ink)", color: "#fff" }}
       >
-        <Link href="/admin" className="flex items-center gap-2 font-bold text-sm text-white">
+        <Link
+          href="/admin"
+          className="flex items-center gap-2 font-bold text-sm text-white"
+        >
           <span className="logo-mark" />
           <span>
-            Boardroom <span style={{ color: "var(--accent)" }}>AI</span>
+            Ai<span style={{ color: "var(--accent)" }}>4C</span>
           </span>
         </Link>
         <nav className="flex flex-col gap-1">
-          <p className="text-[10px] uppercase tracking-widest font-bold text-white/40 px-2 py-1">Admin</p>
+          <p className="text-[10px] uppercase tracking-widest font-bold text-white/40 px-2 py-1">
+            Admin
+          </p>
           <NavLink href="/admin">Overview</NavLink>
           <NavLink href="/admin/customers">Customers</NavLink>
           <NavLink href="/admin/settings">Settings</NavLink>
@@ -31,7 +40,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   );
 }
 
-function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
+function NavLink({
+  href,
+  children,
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
   return (
     <Link
       href={href}

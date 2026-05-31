@@ -20,20 +20,32 @@ export async function POST(req: NextRequest): Promise<Response> {
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => req.cookies.getAll(), setAll: () => {} } }
+    { cookies: { getAll: () => req.cookies.getAll(), setAll: () => {} } },
   );
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return json({ error: "Unauthorized" }, 401);
 
   // Get workspace — respect active-workspace cookie for multi-workspace users
   const admin = createSupabaseAdminClient();
-  const activeWsId = req.cookies.get("boardroom_active_ws")?.value;
-  const wsBase = admin.from("workspaces").select("id").eq("owner_id", user.id).limit(1);
+  const activeWsId = req.cookies.get("ai4c_active_ws")?.value;
+  const wsBase = admin
+    .from("workspaces")
+    .select("id")
+    .eq("owner_id", user.id)
+    .limit(1);
   let { data: workspace } = activeWsId
     ? await wsBase.eq("id", activeWsId).maybeSingle()
     : await wsBase.order("created_at", { ascending: true }).maybeSingle();
   if (!workspace && activeWsId) {
-    const { data: fb } = await admin.from("workspaces").select("id").eq("owner_id", user.id).order("created_at", { ascending: true }).limit(1).maybeSingle();
+    const { data: fb } = await admin
+      .from("workspaces")
+      .select("id")
+      .eq("owner_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
     workspace = fb;
   }
   if (!workspace) return json({ error: "No workspace" }, 404);

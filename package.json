@@ -1,5 +1,5 @@
 {
-  "name": "boardroom-ai",
+  "name": "ai4c",
   "version": "0.1.0",
   "private": true,
   "engines": {
@@ -23,6 +23,7 @@
     "@anthropic-ai/sdk": "^0.98.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.4",
+    "exceljs": "^4.4.0",
     "next": "^15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

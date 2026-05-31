@@ -1,15 +1,17 @@
 // Read helpers for the current user's workspace.
-// Respects the boardroom_active_ws cookie so multi-workspace users can switch companies.
+// Supports both workspace owners and invited members.
 import { cookies } from "next/headers";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { User } from "@supabase/supabase-js";
 
-const ACTIVE_WS_COOKIE = "boardroom_active_ws";
+const ACTIVE_WS_COOKIE = "ai4c_active_ws";
 
 export type WorkspaceStub = {
   id: string;
   name: string;
   tier: string;
+  isOwner: boolean;
 };
 
 export type WorkspaceContext = {
@@ -20,8 +22,12 @@ export type WorkspaceContext = {
     tier: "trial" | "starter" | "growth" | "scale";
     monthly_token_quota: number;
     onboarded: boolean;
+    /** True if this user owns the workspace; false if they joined via invite */
+    isOwner: boolean;
+    /** Role for invited members; null for owners */
+    memberRole: "viewer" | "editor" | "manager" | null;
   };
-  /** All workspaces owned by this user — used for the sidebar switcher and Group View */
+  /** All workspaces this user owns or is an active member of */
   allWorkspaces: WorkspaceStub[];
   profile: {
     industry: string | null;
@@ -37,66 +43,163 @@ export type WorkspaceContext = {
   } | null;
 };
 
+type WorkspaceRow = {
+  id: string;
+  name: string;
+  tier: "trial" | "starter" | "growth" | "scale";
+  monthly_token_quota: number;
+  onboarded: boolean;
+};
+
 export async function getCurrentWorkspace(): Promise<WorkspaceContext | null> {
   const supabase = await createSupabaseServerClient();
+  const admin = createSupabaseAdminClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  // Check if the user has selected a specific workspace via cookie
   const jar = await cookies();
   const activeWsId = jar.get(ACTIVE_WS_COOKIE)?.value;
 
-  const baseQuery = supabase
-    .from("workspaces")
-    .select("id, name, tier, monthly_token_quota, onboarded")
-    .eq("owner_id", user.id)
-    .limit(1);
+  let resolved: WorkspaceRow | null = null;
+  let isOwner = true;
+  let memberRole: "viewer" | "editor" | "manager" | null = null;
 
-  // Try the cookie-selected workspace first; fall back to the oldest (default)
-  const { data: ws } = activeWsId
-    ? await baseQuery.eq("id", activeWsId).maybeSingle()
-    : await baseQuery.order("created_at", { ascending: true }).maybeSingle();
+  // ── 1. Try the cookie-selected workspace ──────────────────────────────────
+  if (activeWsId) {
+    // Check ownership first
+    const { data: ownedWs } = await supabase
+      .from("workspaces")
+      .select("id, name, tier, monthly_token_quota, onboarded")
+      .eq("id", activeWsId)
+      .eq("owner_id", user.id)
+      .maybeSingle();
 
-  // If the cookie pointed to a deleted/invalid workspace, fall back
-  const { data: fallbackWs } =
-    !ws && activeWsId
-      ? await supabase
-          .from("workspaces")
-          .select("id, name, tier, monthly_token_quota, onboarded")
-          .eq("owner_id", user.id)
-          .order("created_at", { ascending: true })
-          .limit(1)
-          .maybeSingle()
-      : { data: null };
+    if (ownedWs) {
+      resolved = ownedWs as WorkspaceRow;
+      isOwner = true;
+    } else if (user.email) {
+      // Check membership
+      const { data: mem } = await admin
+        .from("workspace_members")
+        .select(
+          "role, workspaces(id, name, tier, monthly_token_quota, onboarded)",
+        )
+        .eq("workspace_id", activeWsId)
+        .eq("invitee_email", user.email.toLowerCase())
+        .eq("status", "active")
+        .maybeSingle();
 
-  const resolved = ws ?? fallbackWs;
+      if (mem?.workspaces) {
+        resolved = mem.workspaces as unknown as WorkspaceRow;
+        isOwner = false;
+        memberRole = mem.role as "viewer" | "editor" | "manager";
+      }
+    }
+  }
+
+  // ── 2. No cookie (or cookie miss) — default to oldest owned workspace ─────
+  if (!resolved) {
+    const { data: ownedWs } = await supabase
+      .from("workspaces")
+      .select("id, name, tier, monthly_token_quota, onboarded")
+      .eq("owner_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (ownedWs) {
+      resolved = ownedWs as WorkspaceRow;
+      isOwner = true;
+    }
+  }
+
+  // ── 3. No owned workspace — fall back to oldest active membership ─────────
+  if (!resolved && user.email) {
+    const { data: mem } = await admin
+      .from("workspace_members")
+      .select(
+        "role, workspaces(id, name, tier, monthly_token_quota, onboarded)",
+      )
+      .eq("invitee_email", user.email.toLowerCase())
+      .eq("status", "active")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (mem?.workspaces) {
+      resolved = mem.workspaces as unknown as WorkspaceRow;
+      isOwner = false;
+      memberRole = mem.role as "viewer" | "editor" | "manager";
+    }
+  }
+
   if (!resolved) return null;
 
-  const [{ data: profile }, { data: voice }, { data: allWs }] =
-    await Promise.all([
-      supabase
-        .from("business_profiles")
-        .select("industry, size, challenges, goals_90d")
-        .eq("workspace_id", resolved.id)
-        .maybeSingle(),
-      supabase
-        .from("brand_voice")
-        .select("voice_summary, tone_attributes, words_to_use, words_to_avoid")
-        .eq("workspace_id", resolved.id)
-        .maybeSingle(),
-      supabase
-        .from("workspaces")
-        .select("id, name, tier")
-        .eq("owner_id", user.id)
-        .order("created_at", { ascending: true }),
-    ]);
+  // ── 4. Load supporting data + all accessible workspaces ───────────────────
+  const [
+    { data: profile },
+    { data: voice },
+    { data: ownedAll },
+    { data: memberAll },
+  ] = await Promise.all([
+    supabase
+      .from("business_profiles")
+      .select("industry, size, challenges, goals_90d")
+      .eq("workspace_id", resolved.id)
+      .maybeSingle(),
+    supabase
+      .from("brand_voice")
+      .select("voice_summary, tone_attributes, words_to_use, words_to_avoid")
+      .eq("workspace_id", resolved.id)
+      .maybeSingle(),
+    supabase
+      .from("workspaces")
+      .select("id, name, tier")
+      .eq("owner_id", user.id)
+      .order("created_at", { ascending: true }),
+    user.email
+      ? admin
+          .from("workspace_members")
+          .select("workspaces(id, name, tier)")
+          .eq("invitee_email", user.email.toLowerCase())
+          .eq("status", "active")
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const memberWorkspaces: WorkspaceStub[] = (memberAll ?? [])
+    .map(
+      (m) =>
+        (m.workspaces as unknown as {
+          id: string;
+          name: string;
+          tier: string;
+        }) ?? null,
+    )
+    .filter(Boolean)
+    .map((w) => ({ ...w, isOwner: false }));
+
+  const ownedWorkspaces: WorkspaceStub[] = (ownedAll ?? []).map((w) => ({
+    ...w,
+    isOwner: true,
+  }));
+
+  // Deduplicate (in case a user somehow owns and is also a member of the same ws)
+  const seen = new Set(ownedWorkspaces.map((w) => w.id));
+  const allWorkspaces: WorkspaceStub[] = [
+    ...ownedWorkspaces,
+    ...memberWorkspaces.filter((w) => !seen.has(w.id)),
+  ];
 
   return {
     user,
-    workspace: resolved,
-    allWorkspaces: (allWs ?? []) as WorkspaceStub[],
+    workspace: {
+      ...resolved,
+      isOwner,
+      memberRole,
+    },
+    allWorkspaces,
     profile: profile ?? null,
     voice: voice ?? null,
   };

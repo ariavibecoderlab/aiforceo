@@ -128,7 +128,7 @@ export function exportPDF(
   </head><body>
     <div class="header">
       <strong>${opts.agentName}</strong> · ${opts.agentTitle} &nbsp;|&nbsp;
-      ${opts.workspaceName} &nbsp;|&nbsp; ${date} &nbsp;|&nbsp; Boardroom AI
+      ${opts.workspaceName} &nbsp;|&nbsp; ${date} &nbsp;|&nbsp; AIforCEO
     </div>
     ${mdToHtml(content)}
   </body></html>`);
@@ -161,7 +161,7 @@ export function exportWord(
   <body>
     <div class="header">
       <strong>${opts.agentName}</strong> · ${opts.agentTitle} &nbsp;|&nbsp;
-      ${opts.workspaceName} &nbsp;|&nbsp; ${date} &nbsp;|&nbsp; Boardroom AI
+      ${opts.workspaceName} &nbsp;|&nbsp; ${date} &nbsp;|&nbsp; AIforCEO
     </div>
     ${mdToHtml(content)}
   </body></html>`;

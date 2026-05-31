@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth/require";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
-const ACTIVE_WS_COOKIE = "boardroom_active_ws";
+const ACTIVE_WS_COOKIE = "ai4c_active_ws";
 
 /** Cookie key that stores the currently-selected workspace id. */
 export async function getActiveWorkspaceId(): Promise<string | null> {
@@ -15,20 +15,36 @@ export async function getActiveWorkspaceId(): Promise<string | null> {
   return jar.get(ACTIVE_WS_COOKIE)?.value ?? null;
 }
 
-/** Switch the active workspace. Verifies ownership before writing the cookie. */
+/** Switch the active workspace. Verifies ownership or active membership before writing the cookie. */
 export async function switchWorkspace(formData: FormData) {
   const user = await requireUser();
   const wsId = formData.get("workspace_id")?.toString();
   if (!wsId) return;
 
   const admin = createSupabaseAdminClient();
-  const { data } = await admin
+
+  // Check ownership first
+  const { data: owned } = await admin
     .from("workspaces")
     .select("id")
     .eq("id", wsId)
     .eq("owner_id", user.id)
     .maybeSingle();
-  if (!data) return; // not their workspace — silently ignore
+
+  // If not an owner, check for active membership
+  if (!owned) {
+    if (!user.email) return;
+    const { data: member } = await admin
+      .from("workspace_members")
+      .select("id")
+      .eq("workspace_id", wsId)
+      .eq("invitee_email", user.email.toLowerCase())
+      .eq("status", "active")
+      .maybeSingle();
+    if (!member) return; // neither owner nor active member — silently ignore
+  }
+
+  const data = owned ?? { id: wsId };
 
   const jar = await cookies();
   jar.set(ACTIVE_WS_COOKIE, wsId, {
@@ -69,6 +85,83 @@ export async function newConversation(
     .single();
   if (error || !data) return { error: error?.message ?? "Insert failed" };
   return { id: data.id };
+}
+
+const NameSchema = z.object({
+  name: z.string().min(2).max(80).trim(),
+});
+
+/** Rename a workspace. Verifies ownership before updating. */
+export async function renameWorkspace(
+  workspaceId: string,
+  name: string,
+): Promise<{ error?: string }> {
+  const user = await requireUser();
+  const parsed = NameSchema.safeParse({ name });
+  if (!parsed.success) return { error: "Name must be 2–80 characters." };
+
+  const admin = createSupabaseAdminClient();
+  const { error } = await admin
+    .from("workspaces")
+    .update({ name: parsed.data.name })
+    .eq("id", workspaceId)
+    .eq("owner_id", user.id);
+
+  if (error) return { error: error.message };
+  revalidatePath("/workspaces");
+  return {};
+}
+
+/** Delete a workspace. Cannot delete the last workspace. */
+export async function deleteWorkspace(
+  workspaceId: string,
+): Promise<{ error?: string }> {
+  const user = await requireUser();
+  const admin = createSupabaseAdminClient();
+
+  // Count how many workspaces this user owns
+  const { count } = await admin
+    .from("workspaces")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", user.id);
+
+  if ((count ?? 0) <= 1) {
+    return { error: "You cannot delete your last workspace." };
+  }
+
+  // Verify ownership then delete (cascade is handled by DB foreign keys)
+  const { error } = await admin
+    .from("workspaces")
+    .delete()
+    .eq("id", workspaceId)
+    .eq("owner_id", user.id);
+
+  if (error) return { error: error.message };
+
+  // If the deleted workspace was active, clear the cookie and pick another
+  const jar = await cookies();
+  const activeId = jar.get(ACTIVE_WS_COOKIE)?.value;
+  if (activeId === workspaceId) {
+    const { data: remaining } = await admin
+      .from("workspaces")
+      .select("id")
+      .eq("owner_id", user.id)
+      .limit(1)
+      .maybeSingle();
+    if (remaining) {
+      jar.set(ACTIVE_WS_COOKIE, remaining.id, {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 365,
+      });
+    } else {
+      jar.delete(ACTIVE_WS_COOKIE);
+    }
+  }
+
+  revalidatePath("/workspaces");
+  return {};
 }
 
 const CreateSchema = z.object({

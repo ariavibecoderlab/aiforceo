@@ -10,6 +10,8 @@ type ActivePage =
   | "workspaces"
   | "connectors"
   | "settings"
+  | "autopilot"
+  | "investor-pack"
   | AgentRole;
 
 const ROLES: AgentRole[] = ["aria", "cmo", "coo", "cfo", "ceo", "cto"];
@@ -71,7 +73,7 @@ export function Sidebar({
           }}
         >
           <span className="logo-mark" />
-          Boardroom <span style={{ color: D.gold }}>AI</span>
+          AI<span style={{ color: D.gold }}>for</span>CEO
         </Link>
         {workspaceName && (
           <div style={{ marginTop: 8 }}>
@@ -149,10 +151,20 @@ export function Sidebar({
           <Item href="/settings" active={active === "settings"} icon="⚙">
             Settings
           </Item>
+          <Item href="/autopilot" active={active === "autopilot"} icon="⚡">
+            Autopilot
+          </Item>
+          <Item
+            href="/reports/investor-pack"
+            active={active === "investor-pack"}
+            icon="📊"
+          >
+            Investor Pack
+          </Item>
         </Section>
 
         {/* AI C-Suite */}
-        <Section title="Your AI C-Suite">
+        <Section title="Command Executives">
           {ROLES.map((r) => (
             <Item
               key={r}

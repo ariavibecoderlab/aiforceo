@@ -9,8 +9,8 @@ const INITIAL_MESSAGES: Msg[] = [
   {
     role: "assistant",
     content:
-      "Hi! I'm Aria, Boardroom AI's Chief of Staff. Ask me anything about what we do — pricing, how it works, or which exec would help you most. 👋"
-  }
+      "I'm Aria — Chief of Staff at AIforCEO. Ask me about the platform, pricing, or which Command Executive would drive the most impact for your business.",
+  },
 ];
 
 // Render message content with markdown-style links: [text](url)
@@ -67,14 +67,17 @@ export function ProspectChat() {
       const res = await fetch("/api/chat/prospect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: nextMessages })
+        body: JSON.stringify({ messages: nextMessages }),
       });
 
       if (!res.ok) {
         const err = await res.text().catch(() => "Error");
         setMessages((cur) => {
           const copy = [...cur];
-          copy[copy.length - 1] = { role: "assistant", content: `Sorry, something went wrong. (${err})` };
+          copy[copy.length - 1] = {
+            role: "assistant",
+            content: `Sorry, something went wrong. (${err})`,
+          };
           return copy;
         });
         return;
@@ -99,7 +102,10 @@ export function ProspectChat() {
       const msg = err instanceof Error ? err.message : "Network error";
       setMessages((cur) => {
         const copy = [...cur];
-        copy[copy.length - 1] = { role: "assistant", content: `Sorry — ${msg}` };
+        copy[copy.length - 1] = {
+          role: "assistant",
+          content: `Sorry — ${msg}`,
+        };
         return copy;
       });
     } finally {
@@ -115,13 +121,11 @@ export function ProspectChat() {
         className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-full text-white font-semibold text-sm shadow-2xl transition-all hover:scale-105 active:scale-95"
         style={{
           background: "linear-gradient(135deg,#7C3AED,#A855F7)",
-          boxShadow: "0 8px 32px rgba(124,58,237,.4)"
+          boxShadow: "0 8px 32px rgba(124,58,237,.4)",
         }}
         aria-label={open ? "Close chat" : "Chat with Aria"}
       >
-        <span
-          className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-[11px] font-bold shrink-0"
-        >
+        <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-[11px] font-bold shrink-0">
           A
         </span>
         {open ? "Close" : "Chat with Aria"}
@@ -135,7 +139,7 @@ export function ProspectChat() {
             width: 320,
             height: 384,
             border: "1px solid var(--line)",
-            boxShadow: "0 24px 64px rgba(15,23,41,.18)"
+            boxShadow: "0 24px 64px rgba(15,23,41,.18)",
           }}
         >
           {/* Header */}
@@ -148,7 +152,9 @@ export function ProspectChat() {
                 A
               </div>
               <div>
-                <p className="text-white text-xs font-bold leading-tight">Aria</p>
+                <p className="text-white text-xs font-bold leading-tight">
+                  Aria
+                </p>
                 <p className="text-white/70 text-[10px]">AI Chief of Staff</p>
               </div>
             </div>
@@ -165,7 +171,8 @@ export function ProspectChat() {
           <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5">
             {messages.map((m, i) => {
               const isUser = m.role === "user";
-              const isLastAssistant = !isUser && i === messages.length - 1 && streaming;
+              const isLastAssistant =
+                !isUser && i === messages.length - 1 && streaming;
               return (
                 <div
                   key={i}
@@ -176,7 +183,7 @@ export function ProspectChat() {
                     className="px-3 py-2 rounded-xl text-xs leading-relaxed max-w-[85%]"
                     style={{
                       background: isUser ? "var(--ink)" : "var(--soft)",
-                      color: isUser ? "#fff" : "var(--ink)"
+                      color: isUser ? "#fff" : "var(--ink)",
                     }}
                   >
                     {isLastAssistant && !m.content ? (

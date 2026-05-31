@@ -10,6 +10,8 @@ const PUBLIC_PATHS = [
   // Auth callback + payment webhook
   "/api/auth/callback",
   "/api/stripe/webhook",
+  // Invite accept — must be public so anyone with the link can land here
+  "/invite",
   // Agent chat (token-gated inside the route, not session-gated here)
   "/api/chat/prospect",
   "/api/chat/agent",
@@ -24,7 +26,7 @@ const PUBLIC_PATHS = [
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isPublic =
-    PUBLIC_PATHS.some((p) => pathname === p) ||
+    PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/")) ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/static");
 
