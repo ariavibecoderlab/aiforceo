@@ -2187,8 +2187,21 @@ export function DashboardClient({
   // Hydration priority: DB (savedKpis) > localStorage > default sample data
   useEffect(() => {
     if (savedKpis && Object.keys(savedKpis).length > 0) {
-      setKpi(savedKpis as WorkspaceKPI);
-      saveKPILocal(workspaceId, savedKpis as WorkspaceKPI);
+      // Deep merge with defaults to fill any missing fields (prevents crashes
+      // when DB data was saved with an older schema that didn't have all fields)
+      const defaults = defaultKPI();
+      const merged: WorkspaceKPI = {
+        periods: {
+          MTD: { ...defaults.periods.MTD, ...((savedKpis as Record<string, unknown>).periods as Record<string, unknown>)?.MTD as object },
+          QTD: { ...defaults.periods.QTD, ...((savedKpis as Record<string, unknown>).periods as Record<string, unknown>)?.QTD as object },
+          YTD: { ...defaults.periods.YTD, ...((savedKpis as Record<string, unknown>).periods as Record<string, unknown>)?.YTD as object },
+        },
+        finance: { ...defaults.finance, ...(savedKpis as Record<string, unknown>).finance as object },
+        marketing: ((savedKpis as Record<string, unknown>).marketing as Channel[]) ?? defaults.marketing,
+        ops: { ...defaults.ops, ...(savedKpis as Record<string, unknown>).ops as object },
+      };
+      setKpi(merged);
+      saveKPILocal(workspaceId, merged);
     } else {
       const local = loadKPILocal(workspaceId);
       if (local) {
