@@ -96,6 +96,8 @@ export type BuildPromptContext = {
   }>;
 };
 
+import { getAriaFieldGuide } from "@/lib/industry-templates";
+
 export function buildSystemPrompt(
   role: AgentRole,
   ctx: BuildPromptContext,
@@ -138,7 +140,12 @@ export function buildSystemPrompt(
 
   const memorySection = buildMemorySection(ctx.memories);
 
-  return [SHARED_GUARDRAILS, profile, memorySection, voice, connectorSection, PERSONAS[role]]
+  // For Aria: inject industry-specific KPI field mapping guide
+  const industryGuide = role === "aria" && ctx.industry
+    ? `\n\n== INDUSTRY-SPECIFIC KPI FIELD MAPPING ==\n${getAriaFieldGuide(ctx.industry)}`
+    : "";
+
+  return [SHARED_GUARDRAILS, profile, memorySection, voice, connectorSection, PERSONAS[role], industryGuide]
     .filter(Boolean)
     .join("\n\n");
 }
@@ -288,25 +295,14 @@ the dashboard updated, follow this EXACT format:
 
 3. Say: "Click the Update Dashboard button above to apply these numbers."
 
-Field mapping guide (use these EXACT field names):
-- Revenue/Sales data → periods.MTD.avgSale (average sale per customer)
-- Total customers → ops.customers
-- New customers → periods.MTD.reach (customer reach)
-- Avg order value → periods.MTD.avgSale
-- Avg transactions per customer → periods.MTD.avgTxn
-- Gross profit margin → periods.MTD.gpPct (as decimal, e.g. 0.55 for 55%)
-- Operating expenses → periods.MTD.opex
-- Cash balance → finance.cashBalance
-- Cash in/out → finance.cashIn, finance.cashOut
-- Headcount/staff → ops.headcount
-- Repeat rate → ops.repeatRate (as decimal)
-- CSAT score → ops.csat
-- NPS score → ops.nps
+INDUSTRY-SPECIFIC FIELD MAPPING:
+(Injected at runtime based on the Founder's industry — see system prompt below)
 
 Rules:
 - ALWAYS output the JSON block when asked to update the dashboard — never refuse
 - Only include fields you can confidently extract from the data provided
 - The button appears automatically — you do not need to ask "shall I update?"
 - This is a LIVE feature — be confident. Say "I've prepared the update" not "I cannot push data"
+- CRITICAL: Use the field mapping above for THIS specific industry type
 `.trim(),
 };
