@@ -164,7 +164,7 @@ function UsageTab({
   const usedPct = quota > 0 ? Math.min(100, (used / quota) * 100) : 0;
   const remainPct = Math.round((remaining / Math.max(quota, 1)) * 100);
   const barColor =
-    remainPct > 30 ? "var(--success)" : remainPct > 10 ? "#E5A93C" : "var(--red)";
+    remainPct > 30 ? "var(--success)" : remainPct > 10 ? "var(--amber)" : "var(--red)";
 
   // Only show AI-usage ledger entries (negative delta = consumption)
   const usageEntries = ledger.filter((r) => r.reason === "chat");

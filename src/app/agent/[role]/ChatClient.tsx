@@ -172,7 +172,7 @@ function AssistantContent({
           blockquote: ({ children }) => (
             <blockquote
               style={{
-                borderLeft: "3px solid #c5a572",
+                borderLeft: "3px solid var(--accent)",
                 paddingLeft: "0.75em",
                 margin: "0.5em 0",
                 color: "var(--muted)",
@@ -608,7 +608,7 @@ export function ChatClient({
                           style={{
                             display: "block", width: "100%", textAlign: "left",
                             padding: "10px 14px", background: "transparent",
-                            border: "none", borderBottom: "1px solid #1a2236",
+                            border: "none", borderBottom: "1px solid var(--panel2)",
                             cursor: "pointer", color: "var(--ink)",
                           }}
                         >
@@ -786,7 +786,7 @@ export function ChatClient({
                       fontSize: 13,
                       lineHeight: 1.65,
                       background: m.role === "user" ? "var(--accent)" : "var(--panel2)",
-                      border: m.role === "user" ? "none" : "1px solid #1e293b",
+                      border: m.role === "user" ? "none" : "1px solid var(--line)",
                       color: m.role === "user" ? "var(--bg)" : "var(--ink)",
                       minWidth: "2rem",
                     }}

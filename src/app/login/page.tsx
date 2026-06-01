@@ -158,7 +158,7 @@ function LoginInner() {
                     border: "none",
                     transition: "all 0.15s",
                     background: active ? "var(--accent)" : "transparent",
-                    color: active ? "#0a0e1a" : "var(--muted)",
+                    color: active ? "var(--bg)" : "var(--muted)",
                   }}
                 >
                   {m === "signin" ? "Sign in" : "Create account"}

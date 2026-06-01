@@ -69,7 +69,7 @@ const D = {
   dim: "#8597B8",
   red: "var(--red)",
   green: "var(--success)",
-  amber: "#E5A93C",
+  amber: "var(--amber)",
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────

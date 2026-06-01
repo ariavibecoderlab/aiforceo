@@ -7,7 +7,7 @@ function fmt(n: number): string {
 export function CreditMeter({ remaining, quota }: { remaining: number; quota: number }) {
   const safeQuota = Math.max(quota, 1);
   const pct = Math.max(0, Math.min(100, (remaining / safeQuota) * 100));
-  const barColor = pct > 50 ? "#3FB984" : pct > 20 ? "#E5A93C" : "#E5544B";
+  const barColor = pct > 50 ? "var(--success)" : pct > 20 ? "var(--amber)" : "var(--red)";
   return (
     <div style={{
       borderRadius: 12, padding: "12px 14px",

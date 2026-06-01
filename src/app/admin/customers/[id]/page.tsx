@@ -221,7 +221,7 @@ export default async function AdminCustomerDetailPage({
                   tokensUsedMtd / quota > 0.8
                     ? "var(--red)"
                     : tokensUsedMtd / quota > 0.5
-                      ? "#E5A93C"
+                      ? "var(--amber)"
                       : "var(--success)",
               }}
             />

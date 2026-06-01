@@ -248,7 +248,7 @@ export default function PricingPage() {
               className="btn"
               style={{
                 background: "var(--gold)",
-                color: "#0a0e1a",
+                color: "var(--bg)",
                 border: "none",
                 textDecoration: "none",
                 display: "inline-flex",
