@@ -5,8 +5,10 @@ import Link from "next/link";
 import type { AgentRole } from "@/lib/prompts";
 import { saveKPIs } from "@/server/actions/dashboard";
 import { switchWorkspace } from "@/server/actions/workspaces";
-import { OfficeView } from "@/app/_components/OfficeView";
-import { WelcomeGuide } from "@/app/_components/WelcomeGuide";
+import dynamic from "next/dynamic";
+
+const OfficeView = dynamic(() => import("@/app/_components/OfficeView").then(m => m.OfficeView), { ssr: false });
+const WelcomeGuide = dynamic(() => import("@/app/_components/WelcomeGuide").then(m => m.WelcomeGuide), { ssr: false });
 
 /* ─── TIER COLOURS (matches WorkspaceSwitcher) ───────────────── */
 const TIER_COLOR: Record<string, string> = {
