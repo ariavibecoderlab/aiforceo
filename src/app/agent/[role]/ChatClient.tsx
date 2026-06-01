@@ -857,9 +857,11 @@ export function ChatClient({
                                 const res = await mergeKPIUpdate(parsed.updates);
                                 if (res.ok) {
                                   setFeedbackSent((prev) => ({ ...prev, [i]: "up" }));
-                                  // Also clear localStorage KPI cache so dashboard loads fresh from DB
-                                  try { localStorage.removeItem(`ai4c_kpi_${new URL(window.location.href).searchParams.get("ws") ?? ""}`); } catch {}
-                                  // Refresh server component data
+                                  // Clear ALL localStorage KPI caches so dashboard loads fresh from DB
+                                  try {
+                                    const keys = Object.keys(localStorage).filter(k => k.startsWith("ai4c_kpi_"));
+                                    keys.forEach(k => localStorage.removeItem(k));
+                                  } catch {}
                                   router.refresh();
                                 }
                               } catch { /* silent */ }
