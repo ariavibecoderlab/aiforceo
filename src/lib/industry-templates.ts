@@ -41,7 +41,7 @@ const TEMPLATES: IndustryTemplate[] = [
       prospectLabel: "Walk-ins",
       customerLabel: "Paying Customers",
       salesLabel: "Total Revenue",
-      avgSaleLabel: "Avg Check Size",
+      avgSaleLabel: "Avg $ Sales",
       avgTxnLabel: "Visits per Customer",
       leadCRLabel: "Order Rate",
       saleCRLabel: "Purchase Rate",
