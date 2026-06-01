@@ -342,65 +342,66 @@ export async function POST(req: NextRequest): Promise<Response> {
           controller.enqueue(encoder.encode(`\n[DELEGATION:done]\n`));
         }
 
+        // ── Persist BEFORE closing stream ────────────────────────
+        // On Cloudflare Workers, the execution context may terminate
+        // after controller.close(). Persisting first ensures the
+        // assistant message is always saved to DB.
+        try {
+          const { data: aMsg } = await admin
+            .from("messages")
+            .insert({
+              conversation_id: conversationId,
+              workspace_id: workspace.id,
+              role: "assistant",
+              content: fullText,
+              input_tokens: inputTokens,
+              output_tokens: outputTokens,
+              model: ANTHROPIC_MODEL,
+            })
+            .select("id")
+            .single();
+
+          await recordUsage({
+            workspaceId: workspace.id,
+            inputTokens,
+            outputTokens,
+            messageId: aMsg?.id,
+          });
+
+          // Update conversation title from first user message
+          await admin
+            .from("conversations")
+            .update({
+              updated_at: new Date().toISOString(),
+              ...(messages.length <= 2
+                ? { title: lastUser.content.slice(0, 60) }
+                : {}),
+            })
+            .eq("id", conversationId);
+
+          // Fire-and-forget tasks (may or may not complete before Worker shuts down)
+          if (lastUser.attachments?.length && aMsg?.id) {
+            void uploadAttachmentsToStorage({
+              workspaceId: workspace.id,
+              messageId:   aMsg.id,
+              attachments: lastUser.attachments,
+            });
+          }
+          void extractAndSaveMemories({
+            workspaceId:      workspace.id,
+            agentRole:        role,
+            userMessage:      lastUser.content,
+            assistantMessage: fullText,
+          });
+        } catch {
+          // Non-fatal — usage discrepancy handled in reconciliation
+        }
+
         controller.close();
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Stream error";
         controller.enqueue(encoder.encode(`\n\n⚠ ${msg}`));
         controller.close();
-      }
-
-      // Persist assistant message + token usage (non-fatal if it fails)
-      try {
-        const { data: aMsg } = await admin
-          .from("messages")
-          .insert({
-            conversation_id: conversationId,
-            workspace_id: workspace.id,
-            role: "assistant",
-            content: fullText,
-            input_tokens: inputTokens,
-            output_tokens: outputTokens,
-            model: ANTHROPIC_MODEL,
-          })
-          .select("id")
-          .single();
-
-        await recordUsage({
-          workspaceId: workspace.id,
-          inputTokens,
-          outputTokens,
-          messageId: aMsg?.id,
-        });
-
-        // Upload attachments to Supabase Storage — fire-and-forget
-        if (lastUser.attachments?.length && aMsg?.id) {
-          void uploadAttachmentsToStorage({
-            workspaceId: workspace.id,
-            messageId:   aMsg.id,
-            attachments: lastUser.attachments,
-          });
-        }
-
-        // Extract and persist memories — fire-and-forget, never blocks the stream
-        void extractAndSaveMemories({
-          workspaceId:      workspace.id,
-          agentRole:        role,
-          userMessage:      lastUser.content,
-          assistantMessage: fullText,
-        });
-
-        // Update conversation title from first user message
-        await admin
-          .from("conversations")
-          .update({
-            updated_at: new Date().toISOString(),
-            ...(messages.length <= 2
-              ? { title: lastUser.content.slice(0, 60) }
-              : {}),
-          })
-          .eq("id", conversationId);
-      } catch {
-        // Non-fatal — usage discrepancy handled in reconciliation
       }
     },
   });
