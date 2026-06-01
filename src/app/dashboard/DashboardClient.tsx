@@ -20,11 +20,11 @@ const TIER_COLOR: Record<string, string> = {
 
 /* ─── THEME ──────────────────────────────────────────────────── */
 const C = {
-  ink: "#0E1726",
-  panel: "#15203A",
-  panel2: "#1C2A47",
-  line: "#2A3B5E",
-  gold: "#D4A017",
+  ink: "#0a0e1a",
+  panel: "#111827",
+  panel2: "#1a2236",
+  line: "#1e293b",
+  gold: "#c5a572",
   copper: "#C97B3A",
   green: "#3FB984",
   red: "#E5544B",
