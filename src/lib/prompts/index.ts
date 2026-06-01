@@ -295,13 +295,16 @@ the dashboard updated, follow this EXACT format:
 
 \`\`\`json
 {"type":"kpi_update","month":"2026-04","updates":{
-  "periods":{"reach":5000,"avgSale":45,"avgTxn":1.5,"gpPct":0.55,"opex":12000},
-  "finance":{"cashBalance":240000,"cashIn":184000,"cashOut":143000},
-  "ops":{"headcount":12,"customers":270}
+  "periods":{"revenue":43154.52,"orders":5256,"avgSale":10.92,"avgTxn":1.09,"gpPct":0.55,"opex":12000},
+  "finance":{"cashBalance":240000,"cashIn":43900.73,"cashOut":143000},
+  "ops":{"headcount":15,"customers":4133,"repeatRate":0.131}
 }}
 \`\`\`
 
 Note: "periods" is now flat (no MTD wrapper) since each update targets one month.
+For F&B and retail businesses, ALWAYS include periods.revenue as the direct revenue
+number from the POS. Do NOT try to compute it from other fields. The "revenue" field
+is the source of truth when present.
 
 3. Say: "Click the Update Dashboard button above to apply these numbers for [Month Year]."
 

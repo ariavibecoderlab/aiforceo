@@ -9,6 +9,11 @@
 /* ─── Period (revenue-formula row) ─────────────────────────────── */
 
 export type PeriodRaw = {
+  // === Direct fields (preferred for F&B, retail, any POS-based business) ===
+  revenue?: number;          // Direct revenue from POS/accounting. When set, dashboard uses this instead of computing.
+  orders?: number;           // Total orders/transactions
+
+  // === Funnel fields (for SaaS, services, lead-gen businesses) ===
   reach: number;
   leadCR: number;
   saleCR: number;
@@ -98,6 +103,8 @@ export type MonthlyKPIRecord = {
 /* ─── Zero constants ───────────────────────────────────────────── */
 
 export const ZERO_PERIOD: PeriodRaw = {
+  revenue: undefined,
+  orders: undefined,
   reach: 0,
   leadCR: 0,
   saleCR: 0,
@@ -146,9 +153,14 @@ export const ZERO_OPS: OpsData = {
 /* ─── Compute derived period fields ────────────────────────────── */
 
 export function computePeriod(r: PeriodRaw): PeriodData {
+  // Funnel-derived values (always computed for display even when direct revenue is used)
   const prospects = Math.round(r.reach * r.leadCR);
-  const customers = Math.round(prospects * r.saleCR);
-  const sales = Math.round(customers * r.avgSale * r.avgTxn);
+  const funnelCustomers = Math.round(prospects * r.saleCR);
+  const funnelSales = Math.round(funnelCustomers * r.avgSale * r.avgTxn);
+
+  // If direct revenue is set, use it. Otherwise compute from funnel.
+  const sales = r.revenue ?? funnelSales;
+  const customers = funnelCustomers > 0 ? funnelCustomers : (r.orders ?? 0);
   const gp = Math.round(sales * r.gpPct);
   const ebitda = gp - r.opex;
   const breakeven = r.gpPct > 0 ? Math.round(r.fixedCost / r.gpPct) : 0;

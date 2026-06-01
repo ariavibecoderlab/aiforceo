@@ -87,8 +87,12 @@ function relTime(iso: string | null): string {
 /* ─── COMPUTE PERIOD ─────────────────────────────────────────── */
 function compute(r: PeriodRaw): PeriodData {
   const prospects = Math.round(r.reach * r.leadCR);
-  const customers = Math.round(prospects * r.saleCR);
-  const sales = Math.round(customers * r.avgSale * r.avgTxn);
+  const funnelCustomers = Math.round(prospects * r.saleCR);
+  const funnelSales = Math.round(funnelCustomers * r.avgSale * r.avgTxn);
+
+  // If direct revenue is set, use it. Otherwise compute from funnel.
+  const sales = r.revenue ?? funnelSales;
+  const customers = funnelCustomers > 0 ? funnelCustomers : (r.orders ?? 0);
   const gp = Math.round(sales * r.gpPct);
   const ebitda = gp - r.opex;
   const breakeven = r.gpPct > 0 ? Math.round(r.fixedCost / r.gpPct) : 0;
@@ -1755,6 +1759,8 @@ function EditModal({
     pct?: boolean;
   };
   const periodFields: FieldRow[] = [
+    { label: "Revenue (RM) — direct from POS", key: "revenue" as keyof PeriodRaw, step: 100 },
+    { label: "Total Orders", key: "orders" as keyof PeriodRaw, step: 1 },
     { label: "Reach (impressions/leads)", key: "reach", step: 100 },
     { label: "Lead Conversion Rate", key: "leadCR", step: 0.01, pct: true },
     { label: "Sale Conversion Rate", key: "saleCR", step: 0.01, pct: true },
@@ -1853,8 +1859,9 @@ function EditModal({
                 type="number"
                 step={f.step}
                 value={
-                  f.pct ? ((p[f.key] as number) * 100).toFixed(1) : p[f.key]
+                  p[f.key] == null ? "" : f.pct ? ((p[f.key] as number) * 100).toFixed(1) : p[f.key]
                 }
+                placeholder={p[f.key] == null ? "Optional" : undefined}
                 onChange={(e) => {
                   const raw = parseFloat(e.target.value);
                   numField(

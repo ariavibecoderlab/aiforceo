@@ -53,18 +53,19 @@ const TEMPLATES: IndustryTemplate[] = [
     showCapacity: true,        // kitchen/seating capacity
     ariaFieldGuide: `
 F&B / Restaurant field mapping:
-- Total revenue → Use: periods.MTD with reach=totalOrders, leadCR=1, saleCR=1, avgSale=revenuePerOrder, avgTxn=1
-  Formula: reach × avgSale = Total Revenue (bypass the funnel)
-- Total orders → periods.MTD.reach
-- Avg order value → periods.MTD.avgSale (total revenue ÷ total orders)
-- Total customers → ops.customers
+- Revenue (from POS) → periods.revenue (DIRECT — do not compute from formula)
+- Total orders → periods.orders
+- Avg order value → periods.avgSale (revenue ÷ orders)
+- Avg transactions per customer → periods.avgTxn
+- GP margin % → periods.gpPct (as decimal, e.g. 0.55 for 55%)
+- Operating expenses → periods.opex
+- Total paying customers → ops.customers
 - New customers → NOT a dashboard field (mention in analysis only)
-- Repeat rate → ops.repeatRate (as decimal, e.g. 0.187)
+- Repeat customers → calculate ops.repeatRate = repeat ÷ total customers
 - Staff count → ops.headcount
-- COGS / Food cost % → periods.MTD.gpPct = 1 - foodCostPct (e.g. if food cost is 35%, gpPct = 0.65)
-- Rent + salaries + utilities → periods.MTD.opex
 - Cash in bank → finance.cashBalance
-IMPORTANT: Set leadCR=1 and saleCR=1 for F&B. The funnel model doesn't apply.`,
+- Payment breakdown (RaudhahPay etc.) → finance.cashIn (total of all payment methods)
+CRITICAL: For F&B, ALWAYS use periods.revenue for the direct revenue number. NEVER try to reverse-engineer it through reach × leadCR × saleCR × avgSale × avgTxn.`,
   },
   {
     id: "saas",
@@ -120,16 +121,19 @@ SaaS / Tech field mapping:
     showCapacity: false,
     ariaFieldGuide: `
 E-commerce / Retail field mapping:
-- GMV / Revenue → periods.MTD: reach=visitors, leadCR=addToCartRate, saleCR=checkoutRate, avgSale=AOV, avgTxn=ordersPerCustomer
-- Website/store visitors → periods.MTD.reach
-- Add-to-cart rate → periods.MTD.leadCR (as decimal)
-- Checkout/conversion rate → periods.MTD.saleCR (as decimal)
-- Average order value (AOV) → periods.MTD.avgSale
+- Revenue / GMV (from platform/POS) → periods.revenue (DIRECT — use the actual revenue number)
+- Total orders → periods.orders
+- Website/store visitors → periods.reach
+- Add-to-cart rate → periods.leadCR (as decimal)
+- Checkout/conversion rate → periods.saleCR (as decimal)
+- Average order value (AOV) → periods.avgSale
+- Orders per customer → periods.avgTxn
 - Total customers → ops.customers
 - Repeat purchase rate → ops.repeatRate
 - Return rate → ops.complaints (repurposed)
 - Inventory value → finance.inventory
-- Shipping/fulfillment → ops.onTimeDelivery`,
+- Shipping/fulfillment → ops.onTimeDelivery
+CRITICAL: For E-commerce, ALWAYS use periods.revenue for the direct revenue number when available. The funnel fields (reach, leadCR, saleCR) can still be set for conversion analysis, but revenue is the source of truth.`,
   },
   {
     id: "services",

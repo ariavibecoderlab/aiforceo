@@ -80,6 +80,12 @@ function rollupPeriods(records: MonthlyKPIRecord[]): PeriodRaw {
   let totalFixedCost = 0;
   let totalCapexMtd = 0;
 
+  // Direct fields — SUM across months (volume fields)
+  let totalRevenue = 0;
+  let totalOrders = 0;
+  let hasAnyRevenue = false;
+  let hasAnyOrders = false;
+
   // Weighted-average accumulators
   let sumLeadCR_w = 0,
     wReach = 0; // weight: reach
@@ -95,7 +101,17 @@ function rollupPeriods(records: MonthlyKPIRecord[]): PeriodRaw {
     const p = rec.periodData;
     const prospects = p.reach * p.leadCR;
     const customers = prospects * p.saleCR;
-    const sales = customers * p.avgSale * p.avgTxn;
+    const sales = p.revenue ?? (customers * p.avgSale * p.avgTxn);
+
+    // Direct fields — sum when present
+    if (p.revenue != null) {
+      totalRevenue += p.revenue;
+      hasAnyRevenue = true;
+    }
+    if (p.orders != null) {
+      totalOrders += p.orders;
+      hasAnyOrders = true;
+    }
 
     // VOLUME — sum
     totalReach += p.reach;
@@ -119,6 +135,8 @@ function rollupPeriods(records: MonthlyKPIRecord[]): PeriodRaw {
   }
 
   return {
+    revenue: hasAnyRevenue ? totalRevenue : undefined,
+    orders: hasAnyOrders ? totalOrders : undefined,
     reach: totalReach,
     leadCR: wReach > 0 ? sumLeadCR_w / wReach : 0,
     saleCR: wProspects > 0 ? sumSaleCR_w / wProspects : 0,
@@ -313,7 +331,10 @@ export function computeMoMTrend(
 
   const periodDelta: MoMTrend["periodDelta"] = {};
   for (const key of Object.keys(current.periodData) as (keyof PeriodRaw)[]) {
-    const delta = pctChange(current.periodData[key], prev.periodData[key]);
+    const curVal = current.periodData[key];
+    const prevVal = prev.periodData[key];
+    if (curVal == null || prevVal == null) continue;
+    const delta = pctChange(curVal, prevVal);
     if (delta !== undefined) periodDelta[key] = delta;
   }
 
@@ -355,6 +376,8 @@ function stdDev(values: number[]): { mean: number; sd: number } {
 }
 
 const FIELD_LABELS: Record<string, string> = {
+  revenue: "Revenue (direct)",
+  orders: "Orders",
   reach: "Reach / Traffic",
   leadCR: "Lead conversion rate",
   saleCR: "Sale conversion rate",
@@ -440,12 +463,11 @@ export function detectAnomalies(
 
   // Period fields
   for (const key of Object.keys(current.periodData) as (keyof PeriodRaw)[]) {
-    check(
-      "period",
-      key,
-      current.periodData[key],
-      history.map((r) => r.periodData[key]),
-    );
+    const curVal = current.periodData[key];
+    if (curVal == null) continue;
+    const histVals = history.map((r) => r.periodData[key]).filter((v): v is number => v != null);
+    if (histVals.length < 3) continue;
+    check("period", key, curVal, histVals);
   }
 
   // Finance fields
@@ -507,6 +529,8 @@ export function projectTrend(
 
   // Compute average monthly values for VOLUME period fields
   const volumeKeys: (keyof PeriodRaw)[] = [
+    "revenue",
+    "orders",
     "reach",
     "opex",
     "fixedCost",
@@ -527,8 +551,12 @@ export function projectTrend(
   const avgMonthlyVolume: Partial<Record<keyof PeriodRaw, number>> = {};
   for (const key of volumeKeys) {
     let sum = 0;
-    for (const r of yearMonths) sum += r.periodData[key];
-    avgMonthlyVolume[key] = sum / yearMonths.length;
+    let count = 0;
+    for (const r of yearMonths) {
+      const v = r.periodData[key];
+      if (v != null) { sum += v; count++; }
+    }
+    if (count > 0) avgMonthlyVolume[key] = sum / count;
   }
 
   function projectPeriod(remainingMonths: number): PeriodRaw {
@@ -536,15 +564,17 @@ export function projectTrend(
     const projected = { ...ZERO_PERIOD };
 
     for (const key of volumeKeys) {
+      // Skip optional fields that have no data
+      if (avgMonthlyVolume[key] == null) continue;
       // Current total + projected remaining months at average rate
       let currentTotal = 0;
-      for (const r of yearMonths) currentTotal += r.periodData[key];
-      projected[key] = currentTotal + (avgMonthlyVolume[key] ?? 0) * remainingMonths;
+      for (const r of yearMonths) currentTotal += (r.periodData[key] ?? 0);
+      (projected as Record<string, unknown>)[key] = currentTotal + (avgMonthlyVolume[key] ?? 0) * remainingMonths;
     }
 
-    // Rates: carry latest forward
+    // Rates: carry latest forward (rateKeys are all required number fields)
     for (const key of rateKeys) {
-      projected[key] = latestPeriod[key];
+      (projected as Record<string, unknown>)[key] = latestPeriod[key];
     }
 
     // capexYtd = projected capexMtd total
