@@ -322,7 +322,7 @@ export function OfficeView({ agentStats, workspaceName, ownerInitial, ownerName,
 
       {/* Office map */}
       <div data-office-map style={{
-        position: "relative", width: "100%", maxWidth: 900, margin: "0 auto",
+        position: "relative", width: "100%", maxWidth: 1100, margin: "0 auto",
         borderRadius: 16, overflow: "hidden", border: "2px solid var(--line)",
         boxShadow: "0 8px 40px rgba(0,0,0,0.5)",
       }}>

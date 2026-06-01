@@ -80,7 +80,7 @@ export function Sidebar({
           }}
         >
           <Link
-            href="/dashboard"
+            href="/command"
             style={{
               display: "flex",
               alignItems: "center",
@@ -143,14 +143,14 @@ export function Sidebar({
         >
           {/* Command */}
           <Section title="Command">
-            <Item href="/office" active={active === "command" || active === "office"} icon="⌂">
+            <Item href="/command" active={active === "command"} icon="⌂">
               Command Centre
             </Item>
             <Item href="/agents" active={active === "agents"} icon="👥">
               AI Executives
             </Item>
             <Item href="/dashboard" active={active === "dashboard" || active === "brief"} icon="📋">
-              Morning Brief
+              Dashboard
             </Item>
           </Section>
 

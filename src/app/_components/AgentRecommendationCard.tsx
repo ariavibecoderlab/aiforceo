@@ -10,9 +10,24 @@ type Props = {
   actionHref?: string;
 };
 
+function cleanInsight(raw: string): string {
+  return raw
+    .replace(/#{1,6}\s*/g, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/_([^_]+)_/g, "$1")
+    .replace(/---+/g, "")
+    .replace(/\n+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 100) + (raw.length > 100 ? "…" : "");
+}
+
 export function AgentRecommendationCard({ role, insight, actionLabel, actionHref }: Props) {
   const agent = AGENTS[role];
   const grad = `linear-gradient(135deg, ${agent.gradient[0]}, ${agent.gradient[1]})`;
+  const cleanedInsight = cleanInsight(insight);
 
   return (
     <div style={{
@@ -44,8 +59,8 @@ export function AgentRecommendationCard({ role, insight, actionLabel, actionHref
       </div>
 
       {/* Insight */}
-      <p style={{ margin: 0, fontSize: 12, color: "var(--muted)", lineHeight: 1.5, flex: 1 }}>
-        {insight}
+      <p style={{ margin: 0, fontSize: 12, color: "var(--muted)", lineHeight: 1.5, flex: 1, minHeight: 36 }}>
+        {cleanedInsight}
       </p>
 
       {/* Action button */}
