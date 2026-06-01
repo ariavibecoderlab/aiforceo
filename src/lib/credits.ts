@@ -93,7 +93,16 @@ export async function getRemainingTokens(workspaceId: string): Promise<number> {
   return Number(data ?? 0);
 }
 
-/** Records consumption against the ledger as a negative delta. */
+/**
+ * Maximum negative balance allowed before the account is locked.
+ * A chat that starts with positive balance may finish over-budget
+ * (streaming can't be stopped mid-response), so we allow a small
+ * overdraft. Once balance hits this floor, all further chats are blocked.
+ */
+export const MAX_OVERDRAFT = 30_000;
+
+/** Records consumption against the ledger as a negative delta.
+ *  Caps the deduction so the balance never falls below -MAX_OVERDRAFT. */
 export async function recordUsage(opts: {
   workspaceId: string;
   inputTokens: number;
@@ -103,9 +112,23 @@ export async function recordUsage(opts: {
   const total = opts.inputTokens + opts.outputTokens;
   if (total <= 0) return;
   const supa = createSupabaseAdminClient();
+
+  // Check current balance to cap the deduction
+  const { data: ledger } = await supa
+    .from("credit_ledger")
+    .select("delta_tokens")
+    .eq("workspace_id", opts.workspaceId);
+  const currentBalance = (ledger ?? []).reduce((s, r) => s + r.delta_tokens, 0);
+
+  // Floor: never let balance go below -MAX_OVERDRAFT
+  const maxDeduction = currentBalance + MAX_OVERDRAFT;
+  const actualDeduction = Math.min(total, Math.max(0, maxDeduction));
+
+  if (actualDeduction <= 0) return; // Already at overdraft floor
+
   const { error } = await supa.from("credit_ledger").insert({
     workspace_id: opts.workspaceId,
-    delta_tokens: -total,
+    delta_tokens: -actualDeduction,
     reason: "chat",
     message_id: opts.messageId ?? null,
   });

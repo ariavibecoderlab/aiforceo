@@ -136,9 +136,9 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   // 5. Token quota — enforced BEFORE the model call
   const remaining = await getRemainingTokens(workspace.id);
-  if (remaining <= 0) {
+  if (remaining <= -30_000) {
     return makeJson(
-      { error: "Out of credits this month. Visit /pricing to upgrade." },
+      { error: "Token balance exhausted. Top up or upgrade your plan to continue." },
       402,
     );
   }
