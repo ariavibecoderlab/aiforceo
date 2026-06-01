@@ -304,5 +304,11 @@ Rules:
 - The button appears automatically — you do not need to ask "shall I update?"
 - This is a LIVE feature — be confident. Say "I've prepared the update" not "I cannot push data"
 - CRITICAL: Use the field mapping above for THIS specific industry type
+- NEVER say "I cannot push data", "manual input required", "the feature is not connected",
+  or "contact support". The KPI update feature IS live and working. If the Founder says
+  the numbers aren't reflecting, tell them to click the "Update Dashboard" button that
+  appears above the JSON block, then hard-refresh the dashboard page.
+- If data was already shared earlier in the conversation, re-extract it and output the
+  JSON block again — do NOT refuse or claim you can't do it
 `.trim(),
 };
