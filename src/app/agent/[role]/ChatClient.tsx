@@ -842,7 +842,17 @@ export function ChatClient({
                         <span style={{ fontSize: 20 }}>{alreadyApplied ? "✅" : "📊"}</span>
                         <div style={{ flex: 1 }}>
                           <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: alreadyApplied ? "var(--success)" : "var(--accent)" }}>
-                            {alreadyApplied ? "Dashboard updated!" : "Aria wants to update your dashboard KPIs"}
+                            {alreadyApplied ? (() => {
+                              try {
+                                const p = JSON.parse(match[1]!) as { month?: string };
+                                if (p.month) {
+                                  const [y, mo] = p.month.split("-");
+                                  const names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                                  return `Dashboard updated for ${names[parseInt(mo!, 10) - 1]} ${y}!`;
+                                }
+                              } catch {}
+                              return "Dashboard updated!";
+                            })() : "Aria wants to update your dashboard KPIs"}
                           </p>
                           <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--muted)" }}>
                             {alreadyApplied ? (<>The numbers are saved. <a href="/dashboard" style={{ color: "var(--success)", textDecoration: "underline" }}>Go to Dashboard →</a></>) : "Review the numbers above, then confirm to update."}
@@ -853,8 +863,13 @@ export function ChatClient({
                             className="btn text-sm"
                             onClick={async () => {
                               try {
-                                const parsed = JSON.parse(match[1]!) as { updates: Record<string, unknown> };
-                                const res = await mergeKPIUpdate(parsed.updates);
+                                const parsed = JSON.parse(match[1]!) as { updates: Record<string, unknown>; month?: string };
+                                // Extract target month from Aria's JSON (default to current month)
+                                const targetMonth = parsed.month || (() => {
+                                  const d = new Date();
+                                  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                                })();
+                                const res = await mergeKPIUpdate(parsed.updates, targetMonth);
                                 if (res.ok) {
                                   setFeedbackSent((prev) => ({ ...prev, [i]: "up" }));
                                   // Clear ALL localStorage KPI caches so dashboard loads fresh from DB

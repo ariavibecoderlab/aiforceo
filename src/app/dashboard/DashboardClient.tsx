@@ -1,10 +1,22 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { AgentRole } from "@/lib/prompts";
-import { saveKPIs } from "@/server/actions/dashboard";
+import { saveMonthlyKPI } from "@/server/actions/dashboard";
 import { switchWorkspace } from "@/server/actions/workspaces";
+import { buildKPIView, computeMoMTrend } from "@/lib/kpi/rollup";
+import type { MoMTrend } from "@/lib/kpi/rollup";
+import type {
+  MonthlyKPIRecord,
+  PeriodRaw as KPIPeriodRaw,
+  FinanceData as KPIFinanceData,
+  OpsData as KPIOpsData,
+  Channel as KPIChannel,
+  WorkspaceKPI as KPIWorkspaceKPI,
+} from "@/lib/kpi/types";
+import { ZERO_PERIOD, ZERO_FINANCE, ZERO_OPS } from "@/lib/kpi/types";
 import dynamic from "next/dynamic";
 
 const OfficeView = dynamic(() => import("@/app/_components/OfficeView").then(m => m.OfficeView), { ssr: false });
@@ -36,20 +48,9 @@ const C = {
   teal: "#2A9D8F",
 };
 
-/* ─── TYPES ──────────────────────────────────────────────────── */
-export type PeriodRaw = {
-  reach: number;
-  leadCR: number;
-  saleCR: number;
-  avgSale: number;
-  avgTxn: number;
-  gpPct: number;
-  opex: number;
-  capexMtd: number;
-  capexYtd: number;
-  fixedCost: number;
-};
-export type PeriodData = PeriodRaw & {
+/* ─── TYPES (re-exported from @/lib/kpi/types for backward compat) ── */
+export type PeriodRaw = KPIPeriodRaw;
+export type PeriodData = KPIPeriodRaw & {
   prospects: number;
   customers: number;
   sales: number;
@@ -57,50 +58,10 @@ export type PeriodData = PeriodRaw & {
   ebitda: number;
   breakeven: number;
 };
-export type FinanceData = {
-  cashIn: number;
-  cashOut: number;
-  cashBalance: number;
-  ar: number;
-  ap: number;
-  arOverdue: number;
-  assets: number;
-  liabilities: number;
-  equity: number;
-  debtPayment: number;
-  noi: number;
-  inventory: number;
-  runwayMonths: number;
-};
-export type Channel = {
-  name: string;
-  prospects: number;
-  cost: number;
-  customers: number;
-  works: boolean;
-};
-export type OpsData = {
-  headcount: number;
-  openRoles: number;
-  attrition: number;
-  eNPS: number;
-  productivityPerHead: number;
-  trainingHrs: number;
-  customers: number;
-  repeatRate: number;
-  csat: number;
-  nps: number;
-  complaints: number;
-  resolved: number;
-  onTimeDelivery: number;
-  capacityUsed: number;
-};
-export type WorkspaceKPI = {
-  periods: { MTD: PeriodRaw; QTD: PeriodRaw; YTD: PeriodRaw };
-  finance: FinanceData;
-  marketing: Channel[];
-  ops: OpsData;
-};
+export type FinanceData = KPIFinanceData;
+export type Channel = KPIChannel;
+export type OpsData = KPIOpsData;
+export type WorkspaceKPI = KPIWorkspaceKPI;
 export type AgentStat = {
   convCount: number;
   msgCountMtd: number;
@@ -135,11 +96,6 @@ function compute(r: PeriodRaw): PeriodData {
 }
 
 /* ─── DEFAULT KPI DATA ───────────────────────────────────────── */
-const ZERO_PERIOD: PeriodRaw = {
-  reach: 0, leadCR: 0, saleCR: 0, avgSale: 0, avgTxn: 0,
-  gpPct: 0, opex: 0, capexMtd: 0, capexYtd: 0, fixedCost: 0,
-};
-
 function defaultKPI(): WorkspaceKPI {
   return {
     periods: {
@@ -147,56 +103,45 @@ function defaultKPI(): WorkspaceKPI {
       QTD: { ...ZERO_PERIOD },
       YTD: { ...ZERO_PERIOD },
     },
-    finance: {
-      cashIn: 0, cashOut: 0, cashBalance: 0,
-      ar: 0, ap: 0, arOverdue: 0,
-      assets: 0, liabilities: 0, equity: 0,
-      debtPayment: 0, noi: 0, inventory: 0, runwayMonths: 0,
-    },
+    finance: { ...ZERO_FINANCE },
     marketing: [],
-    ops: {
-      headcount: 0, openRoles: 0, attrition: 0, eNPS: 0,
-      productivityPerHead: 0, trainingHrs: 0,
-      customers: 0, repeatRate: 0, csat: 0, nps: 0,
-      complaints: 0, resolved: 0, onTimeDelivery: 0, capacityUsed: 0,
-    },
+    ops: { ...ZERO_OPS },
   };
 }
 
-/**
- * When QTD or YTD are empty (all zeros), copy MTD into them as a starting
- * point. QTD/YTD accumulate as the user keys in data each month — we never
- * multiply or extrapolate. With only one month of data, QTD = YTD = MTD.
- */
-function derivePeriods(periods: WorkspaceKPI["periods"]): WorkspaceKPI["periods"] {
-  const mtd = periods.MTD;
+/* ─── MONTH FORMAT HELPER ────────────────────────────────────── */
+const MONTH_NAMES = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
 
-  function isEmpty(p: PeriodRaw): boolean {
-    return p.reach === 0 && p.opex === 0 && p.avgSale === 0 && p.gpPct === 0;
-  }
-
-  return {
-    MTD: mtd,
-    QTD: isEmpty(periods.QTD) && !isEmpty(mtd) ? { ...mtd } : periods.QTD,
-    YTD: isEmpty(periods.YTD) && !isEmpty(mtd) ? { ...mtd } : periods.YTD,
-  };
+function formatMonth(month: string): string {
+  const [y, m] = month.split("-");
+  const mi = parseInt(m!, 10) - 1;
+  return `${MONTH_NAMES[mi]} ${y}`;
 }
 
-/* ─── LOCALSTORAGE ───────────────────────────────────────────── */
-function loadKPILocal(wsId: string): WorkspaceKPI | null {
-  try {
-    const raw = localStorage.getItem(`ai4c_kpi_${wsId}`);
-    return raw ? (JSON.parse(raw) as WorkspaceKPI) : null;
-  } catch {
-    return null;
-  }
+function formatMonthLong(month: string): string {
+  const [y, m] = month.split("-");
+  const mi = parseInt(m!, 10) - 1;
+  const long = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
+  return `${long[mi]} ${y}`;
 }
-function saveKPILocal(wsId: string, kpi: WorkspaceKPI) {
-  try {
-    localStorage.setItem(`ai4c_kpi_${wsId}`, JSON.stringify(kpi));
-  } catch {
-    /* ignore */
-  }
+
+/* ─── MoM TREND ARROW ────────────────────────────────────────── */
+function TrendArrow({ delta }: { delta: number | undefined }) {
+  if (delta === undefined) return null;
+  const pctStr = (Math.abs(delta) * 100).toFixed(1) + "%";
+  const isUp = delta > 0;
+  const color = isUp ? C.green : C.red;
+  return (
+    <span style={{ fontSize: 10, fontWeight: 700, color, marginLeft: 4 }}>
+      {isUp ? "▲" : "▼"} {pctStr}
+    </span>
+  );
 }
 
 /* ─── SMALL UI PIECES ────────────────────────────────────────── */
@@ -205,11 +150,13 @@ function Stat({
   value,
   sub,
   tone,
+  delta,
 }: {
   label: string;
   value: string;
   sub?: string;
   tone?: "good" | "bad" | "warn";
+  delta?: number;
 }) {
   const col =
     tone === "good"
@@ -249,6 +196,7 @@ function Stat({
         }}
       >
         {value}
+        <TrendArrow delta={delta} />
       </div>
       {sub && (
         <div style={{ color: C.dim, fontSize: 11, marginTop: 3 }}>{sub}</div>
@@ -476,6 +424,7 @@ function CEOView({
   agentStats,
   remaining,
   quota,
+  momTrend,
 }: {
   d: PeriodData;
   f: FinanceData;
@@ -484,6 +433,7 @@ function CEOView({
   agentStats: Record<AgentRole, AgentStat>;
   remaining: number;
   quota: number;
+  momTrend: MoMTrend | null;
 }) {
   const dscr = f.debtPayment > 0 ? f.noi / f.debtPayment : 0;
   const creditPct = Math.round((remaining / Math.max(quota, 1)) * 100);
@@ -505,24 +455,27 @@ function CEOView({
           gap: 12,
         }}
       >
-        <Stat label="Total Sales" value={rm(d.sales)} sub={period} />
+        <Stat label="Total Sales" value={rm(d.sales)} sub={period} delta={momTrend?.periodDelta?.reach} />
         <Stat
           label="Gross Profit"
           value={rm(d.gp)}
           sub={pct(d.gpPct) + " margin"}
+          delta={momTrend?.periodDelta?.gpPct}
         />
         <Stat
           label="EBITDA"
           value={rm(d.ebitda)}
           tone={d.ebitda > 0 ? "good" : "bad"}
+          delta={momTrend?.periodDelta?.opex}
         />
         <Stat
           label="Cash Balance"
           value={rm(f.cashBalance)}
           sub={f.runwayMonths.toFixed(1) + " mo runway"}
           tone={f.runwayMonths > 3 ? "good" : "warn"}
+          delta={momTrend?.financeDelta?.cashBalance}
         />
-        <Stat label="New Customers" value={num(d.customers)} />
+        <Stat label="New Customers" value={num(d.customers)} delta={momTrend?.opsDelta?.customers} />
         <Stat
           label="DSCR"
           value={dscr.toFixed(2) + "×"}
@@ -1762,15 +1715,17 @@ function EditModal({
   kpi,
   onSave,
   onClose,
+  editingMonth,
 }: {
   kpi: WorkspaceKPI;
   onSave: (k: WorkspaceKPI) => void;
   onClose: () => void;
+  editingMonth?: string;
 }) {
   const [form, setForm] = useState<WorkspaceKPI>(
     JSON.parse(JSON.stringify(kpi)),
   );
-  const [tab, setTab] = useState<"MTD" | "QTD" | "YTD">("MTD");
+  const tab = "MTD" as const; // Always edit raw monthly data
 
   function numField(path: string[], val: string) {
     const n = parseFloat(val);
@@ -1856,7 +1811,7 @@ function EditModal({
               fontFamily: "Georgia,serif",
             }}
           >
-            ✏️ Edit Business KPIs
+            Edit KPIs{editingMonth ? ` — ${formatMonthLong(editingMonth)}` : ""}
           </h2>
           <button
             onClick={onClose}
@@ -1870,28 +1825,6 @@ function EditModal({
           >
             ×
           </button>
-        </div>
-
-        {/* Period tabs */}
-        <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
-          {(["MTD", "QTD", "YTD"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              style={{
-                padding: "7px 18px",
-                borderRadius: 8,
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: "pointer",
-                background: tab === t ? C.gold : C.panel2,
-                color: tab === t ? C.ink : C.dim,
-                border: `1px solid ${tab === t ? C.gold : C.line}`,
-              }}
-            >
-              {t}
-            </button>
-          ))}
         </div>
 
         {/* Period fields */}
@@ -2105,6 +2038,8 @@ export function DashboardClient({
   workspaceName,
   agentStats,
   savedKpis,
+  monthlyRecords: initialMonthlyRecords,
+  defaultMonth: initialDefaultMonth,
   remaining,
   quota,
   connectedSources,
@@ -2121,6 +2056,8 @@ export function DashboardClient({
   workspaceName: string;
   agentStats: Record<AgentRole, AgentStat>;
   savedKpis?: WorkspaceKPI | null;
+  monthlyRecords?: MonthlyKPIRecord[];
+  defaultMonth?: string;
   remaining: number;
   quota: number;
   connectedSources: number;
@@ -2133,53 +2070,96 @@ export function DashboardClient({
   hasFinancials?: boolean;
   hasConnectors?: boolean;
 }) {
+  const router = useRouter();
   const [view, setView] = useState<
     "CEO" | "SALES" | "MARKETING" | "CFO" | "COO" | "GROUP"
   >("CEO");
   const [period, setPeriod] = useState<"MTD" | "QTD" | "YTD">("MTD");
-  const [kpi, setKpi] = useState<WorkspaceKPI>(defaultKPI);
   const [editOpen, setEditOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
-  // true when the KPI data is all defaults (no real business data entered yet)
-  const [isDefaultData, setIsDefaultData] = useState(false);
 
-  // Hydration priority: DB (savedKpis) > localStorage > default sample data
-  useEffect(() => {
-    if (savedKpis && Object.keys(savedKpis).length > 0) {
-      // Deep merge with defaults to fill any missing fields (prevents crashes
-      // when DB data was saved with an older schema that didn't have all fields)
-      const defaults = defaultKPI();
-      const rawPeriods = {
-        MTD: { ...defaults.periods.MTD, ...((savedKpis as Record<string, unknown>).periods as Record<string, unknown>)?.MTD as object } as PeriodRaw,
-        QTD: { ...defaults.periods.QTD, ...((savedKpis as Record<string, unknown>).periods as Record<string, unknown>)?.QTD as object } as PeriodRaw,
-        YTD: { ...defaults.periods.YTD, ...((savedKpis as Record<string, unknown>).periods as Record<string, unknown>)?.YTD as object } as PeriodRaw,
-      };
-      const merged: WorkspaceKPI = {
-        periods: derivePeriods(rawPeriods),
-        finance: { ...defaults.finance, ...(savedKpis as Record<string, unknown>).finance as object },
-        marketing: ((savedKpis as Record<string, unknown>).marketing as Channel[]) ?? defaults.marketing,
-        ops: { ...defaults.ops, ...(savedKpis as Record<string, unknown>).ops as object },
-      };
-      setKpi(merged);
-      saveKPILocal(workspaceId, merged);
-    } else {
-      const local = loadKPILocal(workspaceId);
-      if (local) {
-        setKpi({ ...local, periods: derivePeriods(local.periods) });
-      } else {
-        setIsDefaultData(true);
-      }
+  // Monthly KPI state
+  const monthlyRecords = useMemo(
+    () => initialMonthlyRecords ?? [],
+    [initialMonthlyRecords],
+  );
+  const defaultMonth = useMemo(
+    () => initialDefaultMonth ?? (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    })(),
+    [initialDefaultMonth],
+  );
+  const [selectedMonth, setSelectedMonth] = useState(defaultMonth);
+
+  // Build the KPI view from monthly records + selected month
+  const kpi = useMemo(() => {
+    if (monthlyRecords.length > 0) {
+      return buildKPIView(monthlyRecords, selectedMonth);
     }
-    setHydrated(true);
-  }, [workspaceId, savedKpis]);
+    // Fallback to savedKpis for backward compat
+    if (savedKpis && Object.keys(savedKpis).length > 0) {
+      const defaults = defaultKPI();
+      return {
+        periods: {
+          MTD: { ...defaults.periods.MTD, ...savedKpis.periods?.MTD } as PeriodRaw,
+          QTD: { ...defaults.periods.QTD, ...savedKpis.periods?.QTD } as PeriodRaw,
+          YTD: { ...defaults.periods.YTD, ...savedKpis.periods?.YTD } as PeriodRaw,
+        },
+        finance: { ...defaults.finance, ...savedKpis.finance },
+        marketing: savedKpis.marketing ?? defaults.marketing,
+        ops: { ...defaults.ops, ...savedKpis.ops },
+      };
+    }
+    return defaultKPI();
+  }, [monthlyRecords, selectedMonth, savedKpis]);
 
-  function handleSave(updated: WorkspaceKPI) {
-    setKpi(updated);
-    setIsDefaultData(false);
-    saveKPILocal(workspaceId, updated);
-    // Persist to DB in background — fire and forget
-    void saveKPIs(updated);
-  }
+  // Compute MoM trend
+  const momTrend = useMemo(() => {
+    if (monthlyRecords.length === 0) return null;
+    return computeMoMTrend(monthlyRecords, selectedMonth);
+  }, [monthlyRecords, selectedMonth]);
+
+  // true when the KPI data is all defaults (no real business data entered yet)
+  const isDefaultData = monthlyRecords.length === 0 && (!savedKpis || Object.keys(savedKpis).length === 0);
+
+  // Build list of available months for the picker
+  const availableMonths = useMemo(() => {
+    const months = new Set<string>();
+    months.add(defaultMonth); // Always include current month
+    for (const rec of monthlyRecords) months.add(rec.month);
+    return Array.from(months).sort().reverse();
+  }, [monthlyRecords, defaultMonth]);
+
+  // Month labels for picker
+  const monthLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    for (const m of availableMonths) {
+      const hasData = monthlyRecords.some((r) => r.month === m);
+      labels[m] = formatMonth(m) + (hasData ? "" : " (no data)");
+    }
+    return labels;
+  }, [availableMonths, monthlyRecords]);
+
+  useEffect(() => {
+    setHydrated(true);
+    // Clear legacy localStorage caches
+    try {
+      const keys = Object.keys(localStorage).filter(k => k.startsWith("ai4c_kpi_"));
+      keys.forEach(k => localStorage.removeItem(k));
+    } catch { /* ignore */ }
+  }, []);
+
+  const handleSave = useCallback(async (updated: WorkspaceKPI) => {
+    // Save MTD period data to the selected month
+    await saveMonthlyKPI(selectedMonth, {
+      periodData: updated.periods.MTD,
+      financeData: updated.finance,
+      opsData: updated.ops,
+      marketing: updated.marketing,
+    });
+    router.refresh();
+  }, [selectedMonth, router]);
 
   const d = useMemo(() => compute(kpi.periods[period]), [kpi, period]);
   const accent = C.gold;
@@ -2283,6 +2263,12 @@ export function DashboardClient({
             alignItems: "center",
           }}
         >
+          <Sel
+            value={selectedMonth}
+            onChange={(v) => setSelectedMonth(v)}
+            options={availableMonths}
+            labels={monthLabels}
+          />
           <Sel
             value={period}
             onChange={(v) => setPeriod(v as "MTD" | "QTD" | "YTD")}
@@ -2405,6 +2391,7 @@ export function DashboardClient({
           agentStats={agentStats}
           remaining={remaining}
           quota={quota}
+          momTrend={momTrend}
         />
       )}
       {view === "SALES" && <SalesView d={d} period={period} accent={accent} />}
@@ -2450,6 +2437,7 @@ export function DashboardClient({
           kpi={kpi}
           onSave={handleSave}
           onClose={() => setEditOpen(false)}
+          editingMonth={selectedMonth}
         />
       )}
     </div>

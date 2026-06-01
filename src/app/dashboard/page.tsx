@@ -4,7 +4,8 @@ import { type AgentRole } from "@/lib/prompts";
 import { getCurrentWorkspace } from "@/lib/workspace";
 import { getRemainingTokens, TIER_MONTHLY_TOKENS } from "@/lib/credits";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { loadKPIs } from "@/server/actions/dashboard";
+import { loadKPIs, loadMonthlyKPIs } from "@/server/actions/dashboard";
+import { buildKPIView } from "@/lib/kpi/rollup";
 import {
   DashboardClient,
   type AgentStat,
@@ -12,6 +13,11 @@ import {
 } from "./DashboardClient";
 
 const ROLES: AgentRole[] = ["aria", "cmo", "coo", "cfo", "ceo", "cto"];
+
+function currentMonth(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
 
 export default async function DashboardPage() {
   const ctx = await getCurrentWorkspace();
@@ -112,14 +118,22 @@ export default async function DashboardPage() {
     hasFinancials = !!fs;
   } catch { /* non-fatal */ }
 
-  // Load saved KPIs from DB (falls back to null → client uses localStorage → default)
+  // Load monthly KPI records from DB
+  const monthlyRecords = await loadMonthlyKPIs(workspace.id);
+  const defaultMonth = currentMonth();
+
+  // Compute current view for backward compat (savedKpis prop)
+  const savedKpis: WorkspaceKPI | null =
+    monthlyRecords.length > 0
+      ? buildKPIView(monthlyRecords, defaultMonth)
+      : await loadKPIs(workspace.id);
+
   // Also load KPIs for all other workspaces so the Group View can compare companies
-  const [savedKpis, ...otherKpisRaw] = await Promise.all([
-    loadKPIs(workspace.id),
-    ...allWorkspaces
+  const otherKpisRaw = await Promise.all(
+    allWorkspaces
       .filter((ws) => ws.id !== workspace.id)
       .map((ws) => loadKPIs(ws.id).then((kpi) => ({ ws, kpi }))),
-  ]);
+  );
 
   const groupKpis: Array<{
     ws: { id: string; name: string; tier: string };
@@ -127,13 +141,11 @@ export default async function DashboardPage() {
   }> =
     allWorkspaces.length > 1
       ? [
-          { ws: workspace, kpi: savedKpis as WorkspaceKPI | null },
-          ...(
-            otherKpisRaw as Array<{
-              ws: { id: string; name: string; tier: string };
-              kpi: unknown;
-            }>
-          ).map((r) => ({ ws: r.ws, kpi: r.kpi as WorkspaceKPI | null })),
+          { ws: workspace, kpi: savedKpis },
+          ...otherKpisRaw.map((r) => ({
+            ws: r.ws,
+            kpi: r.kpi as WorkspaceKPI | null,
+          })),
         ]
       : [];
 
@@ -157,7 +169,9 @@ export default async function DashboardPage() {
         workspaceId={workspace.id}
         workspaceName={workspace.name}
         agentStats={statsByRole}
-        savedKpis={savedKpis as WorkspaceKPI | null}
+        savedKpis={savedKpis}
+        monthlyRecords={monthlyRecords}
+        defaultMonth={defaultMonth}
         remaining={remaining}
         quota={quota}
         connectedSources={(connectors ?? []).length}
