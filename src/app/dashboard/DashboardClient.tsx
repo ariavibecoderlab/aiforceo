@@ -2272,27 +2272,27 @@ export function DashboardClient({
             padding: "12px 18px",
             marginBottom: 16,
             borderRadius: 12,
-            background: "rgba(124,58,237,0.1)",
-            border: "1px solid rgba(124,58,237,0.3)",
+            background: "rgba(197,165,114,0.08)",
+            border: "1px solid rgba(197,165,114,0.25)",
             textDecoration: "none",
             cursor: "pointer",
           }}
         >
           <span style={{
             width: 36, height: 36, borderRadius: 9, flexShrink: 0,
-            background: "linear-gradient(135deg,#7C3AED,#A855F7)",
+            background: "var(--accent)",
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 16,
+            fontSize: 16, color: "var(--bg)",
           }}>☀</span>
           <div style={{ minWidth: 0 }}>
-            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#A855F7" }}>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--accent)" }}>
               Today&apos;s Morning Brief is ready
             </p>
-            <p style={{ margin: "2px 0 0", fontSize: 12, color: "rgba(168,85,247,0.7)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {todayBriefContent.slice(0, 100)}…
             </p>
           </div>
-          <span style={{ marginLeft: "auto", fontSize: 12, color: "rgba(168,85,247,0.6)", flexShrink: 0 }}>
+          <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--muted)", flexShrink: 0 }}>
             Open Aria →
           </span>
         </Link>
