@@ -164,48 +164,21 @@ function defaultKPI(): WorkspaceKPI {
 }
 
 /**
- * Auto-derive QTD / YTD from MTD when they are empty or zero.
- * Currently we only store one month of data, so:
- *   - QTD = MTD × monthsInQuarterSoFar (volume fields) / rates carry over
- *   - YTD = MTD × monthsInYearSoFar   (volume fields) / rates carry over
- *
- * Volume fields (scale with months): reach, opex, capexMtd, fixedCost
- * Rate/avg fields (carry over as-is): leadCR, saleCR, avgSale, avgTxn, gpPct
- * capexYtd is already cumulative by definition.
+ * When QTD or YTD are empty (all zeros), copy MTD into them as a starting
+ * point. QTD/YTD accumulate as the user keys in data each month — we never
+ * multiply or extrapolate. With only one month of data, QTD = YTD = MTD.
  */
 function derivePeriods(periods: WorkspaceKPI["periods"]): WorkspaceKPI["periods"] {
   const mtd = periods.MTD;
-  const now = new Date();
-  const month = now.getMonth(); // 0-indexed
-  const monthInQuarter = (month % 3) + 1;   // 1, 2, or 3
-  const monthInYear = month + 1;             // 1-12
 
   function isEmpty(p: PeriodRaw): boolean {
     return p.reach === 0 && p.opex === 0 && p.avgSale === 0 && p.gpPct === 0;
   }
 
-  function scale(src: PeriodRaw, months: number): PeriodRaw {
-    return {
-      // Volume fields — multiply by months
-      reach: Math.round(src.reach * months),
-      opex: Math.round(src.opex * months),
-      capexMtd: src.capexMtd,                    // monthly stays as-is
-      fixedCost: Math.round(src.fixedCost * months),
-      // Rate/average fields — carry over unchanged
-      leadCR: src.leadCR,
-      saleCR: src.saleCR,
-      avgSale: src.avgSale,
-      avgTxn: src.avgTxn,
-      gpPct: src.gpPct,
-      // Cumulative
-      capexYtd: Math.round(src.capexMtd * months),
-    };
-  }
-
   return {
     MTD: mtd,
-    QTD: isEmpty(periods.QTD) && !isEmpty(mtd) ? scale(mtd, monthInQuarter) : periods.QTD,
-    YTD: isEmpty(periods.YTD) && !isEmpty(mtd) ? scale(mtd, monthInYear) : periods.YTD,
+    QTD: isEmpty(periods.QTD) && !isEmpty(mtd) ? { ...mtd } : periods.QTD,
+    YTD: isEmpty(periods.YTD) && !isEmpty(mtd) ? { ...mtd } : periods.YTD,
   };
 }
 
