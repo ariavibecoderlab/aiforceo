@@ -315,7 +315,7 @@ export function OfficeView({ agentStats, workspaceName, ownerInitial, ownerName,
         <p style={{ fontSize: 12, color: "var(--muted)", margin: 0 }}>
           {activeCount > 0
             ? `${activeCount} executive${activeCount > 1 ? "s" : ""} working`
-            : "Click any agent for options • Click the big screen for Dashboard • 🎨 Change skin below"
+            : "Click any agent for options"
           }
         </p>
       </motion.div>
@@ -351,18 +351,32 @@ export function OfficeView({ agentStats, workspaceName, ownerInitial, ownerName,
         {/* Big screen in meeting room → Dashboard */}
         <Link href="/dashboard" style={{ textDecoration: "none" }}>
           <motion.div
-            whileHover={{ scale: 1.05, boxShadow: "0 0 30px rgba(24,119,242,0.5)" }}
+            whileHover={{ scale: 1.08, boxShadow: "0 0 40px rgba(24,119,242,0.6)" }}
             style={{
               position: "absolute",
               top: `${MEETING_SCREEN.top}%`, left: `${MEETING_SCREEN.left}%`,
               transform: "translate(-50%, -50%)",
-              width: "12%", height: "8%",
-              borderRadius: 6,
+              width: "14%", height: "10%",
+              borderRadius: 8,
               cursor: "pointer",
               zIndex: 5,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(0,0,0,0.3)",
+              border: "2px solid rgba(24,119,242,0.4)",
+              backdropFilter: "blur(2px)",
             }}
             title="Open Dashboard"
-          />
+          >
+            <span style={{
+              fontSize: 10, fontWeight: 700, color: "#fff",
+              textShadow: "0 1px 4px rgba(0,0,0,0.8)",
+              textTransform: "uppercase", letterSpacing: "0.08em",
+            }}>
+              📊 Dashboard
+            </span>
+          </motion.div>
         </Link>
 
         {/* Agent hotspots */}

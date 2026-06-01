@@ -2191,8 +2191,8 @@ export function DashboardClient({
   hasConnectors?: boolean;
 }) {
   const [view, setView] = useState<
-    "CEO" | "SALES" | "MARKETING" | "CFO" | "COO" | "GROUP" | "OFFICE"
-  >("OFFICE");
+    "CEO" | "SALES" | "MARKETING" | "CFO" | "COO" | "GROUP"
+  >("CEO");
   const [period, setPeriod] = useState<"MTD" | "QTD" | "YTD">("MTD");
   const [kpi, setKpi] = useState<WorkspaceKPI>(defaultKPI);
   const [editOpen, setEditOpen] = useState(false);
@@ -2241,7 +2241,6 @@ export function DashboardClient({
   const accent = C.gold;
 
   const VIEWS: [string, string][] = [
-    ["OFFICE", "🏢 Office View"],
     ["CEO", "CEO Command Centre"],
     ["SALES", "Sales & Profit"],
     ["MARKETING", "Marketing / CMO"],
@@ -2473,24 +2472,7 @@ export function DashboardClient({
       {view === "GROUP" && groupKpis.length > 1 && (
         <GroupView entries={groupKpis} activeId={workspaceId} />
       )}
-      {view === "OFFICE" && (
-        <>
-          <WelcomeGuide
-            workspaceName={workspaceName}
-            hasKpiData={kpi.periods.MTD.reach > 0 || (kpi.finance?.cashBalance ?? 0) > 0}
-            hasBusinessProfile={hasBusinessProfile}
-            hasBrandVoice={hasBrandVoice}
-            hasFinancials={hasFinancials}
-            hasConnectors={hasConnectors}
-          />
-          <OfficeView
-            agentStats={agentStats}
-            workspaceName={workspaceName}
-            ownerInitial={ownerInitial}
-            ownerName={ownerName}
-          />
-        </>
-      )}
+      {/* Office View is now a standalone page at /office */}
 
       {/* FOOTER */}
       <div
@@ -2502,7 +2484,7 @@ export function DashboardClient({
           paddingBottom: 8,
         }}
       >
-        ActionCOACH Profit Formula · {period} view · Numbers are{" "}
+        Numbers are{" "}
         <button
           onClick={() => setEditOpen(true)}
           style={{

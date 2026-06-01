@@ -11,6 +11,7 @@ type ActivePage =
   | "workspaces"
   | "connectors"
   | "settings"
+  | "office"
   | "autopilot"
   | "investor-pack"
   | "documents"
@@ -132,7 +133,10 @@ export function Sidebar({
         >
           {/* Main nav */}
           <Section title="Main">
-            <Item href="/dashboard" active={active === "dashboard"} icon="⌂">
+            <Item href="/office" active={active === "office"} icon="🏢">
+              Office
+            </Item>
+            <Item href="/dashboard" active={active === "dashboard"} icon="📊">
               Dashboard
             </Item>
             <Item href="/agents" active={active === "agents"} icon="🤖">
