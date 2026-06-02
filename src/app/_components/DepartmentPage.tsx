@@ -7,8 +7,9 @@ import { SalesKPIView } from "@/app/_components/views/SalesKPIView";
 import { MarketingKPIView } from "@/app/_components/views/MarketingKPIView";
 import { FinanceKPIView } from "@/app/_components/views/FinanceKPIView";
 import { OperationsKPIView } from "@/app/_components/views/OperationsKPIView";
-import type { WorkspaceKPI, PeriodRaw } from "@/lib/kpi/types";
+import type { WorkspaceKPI, MonthlyKPIRecord, PeriodRaw } from "@/lib/kpi/types";
 import { ZERO_PERIOD, ZERO_FINANCE, ZERO_OPS } from "@/lib/kpi/types";
+import { buildKPIView } from "@/lib/kpi/rollup";
 
 type DepartmentType = "sales" | "marketing" | "finance" | "operations";
 
@@ -54,9 +55,14 @@ function defaultKPI(): WorkspaceKPI {
 type Msg = { role: "user" | "assistant"; content: string; id?: string };
 type PastConv = { id: string; title: string; updatedAt: string };
 
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function formatMonth(m: string) { const [y, mo] = m.split("-"); return `${MONTH_NAMES[parseInt(mo!, 10) - 1]} ${y}`; }
+
 export function DepartmentPage({
   type,
   kpi: kpiProp,
+  monthlyRecords = [],
+  defaultMonth,
   // Chat data
   role,
   agent,
@@ -67,6 +73,8 @@ export function DepartmentPage({
 }: {
   type: DepartmentType;
   kpi: WorkspaceKPI | null;
+  monthlyRecords?: MonthlyKPIRecord[];
+  defaultMonth?: string;
   role: string;
   agent: { name: string; title: string; tag: string; gradient: readonly [string, string] };
   workspaceName: string;
@@ -74,8 +82,26 @@ export function DepartmentPage({
   initialMessages: Msg[];
   pastConversations: PastConv[];
 }) {
+  const now = new Date();
+  const currentMonthStr = defaultMonth ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
   const [period, setPeriod] = useState<"MTD" | "QTD" | "YTD">("MTD");
-  const kpi = kpiProp ?? defaultKPI();
+
+  // Build available months: all months of current year + any with data
+  const availableMonths = useMemo(() => {
+    const months = new Set<string>();
+    const yr = now.getFullYear();
+    for (let m = 0; m <= now.getMonth(); m++) months.add(`${yr}-${String(m + 1).padStart(2, "0")}`);
+    for (const rec of monthlyRecords) months.add(rec.month);
+    return Array.from(months).sort().reverse();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthlyRecords]);
+
+  // Recompute KPIs when month changes
+  const kpi = useMemo(() => {
+    if (monthlyRecords.length > 0) return buildKPIView(monthlyRecords, selectedMonth);
+    return kpiProp ?? defaultKPI();
+  }, [monthlyRecords, selectedMonth, kpiProp]);
 
   const d = useMemo(() => compute(kpi.periods[period] as PeriodRaw), [kpi, period]);
   const dept = DEPARTMENT_CONFIG[type];
@@ -93,10 +119,37 @@ export function DepartmentPage({
     }
   }, [type, d, period, kpi, dept.accent]);
 
+  // Month picker dropdown
+  const monthPickerNode = availableMonths.length > 1 ? (
+    <div style={{ marginBottom: 12 }}>
+      <select
+        value={selectedMonth}
+        onChange={(e) => setSelectedMonth(e.target.value)}
+        style={{
+          padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700,
+          border: `1px solid var(--line)`, background: "var(--panel)", color: "var(--ink)",
+          cursor: "pointer",
+        }}
+      >
+        {availableMonths.map(m => {
+          const hasData = monthlyRecords.some(r => r.month === m);
+          return <option key={m} value={m}>{formatMonth(m)}{hasData ? "" : " ·"}</option>;
+        })}
+      </select>
+    </div>
+  ) : null;
+
+  const kpiWithMonthPicker = (
+    <>
+      {monthPickerNode}
+      {kpiViewNode}
+    </>
+  );
+
   return (
     <DepartmentWorkspace
       department={dept}
-      kpiView={kpiViewNode}
+      kpiView={kpiWithMonthPicker}
       period={period}
       onPeriodChange={setPeriod}
       role={role}

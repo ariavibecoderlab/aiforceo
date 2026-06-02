@@ -24,6 +24,8 @@ export default async function OperationsPage() {
       <DepartmentPage
         type="operations"
         kpi={data.kpi}
+        monthlyRecords={data.monthlyRecords}
+        defaultMonth={data.selectedMonth}
         role="coo"
         agent={data.agent}
         workspaceName={data.workspace.name}

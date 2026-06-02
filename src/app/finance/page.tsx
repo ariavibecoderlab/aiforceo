@@ -24,6 +24,8 @@ export default async function FinancePage() {
       <DepartmentPage
         type="finance"
         kpi={data.kpi}
+        monthlyRecords={data.monthlyRecords}
+        defaultMonth={data.selectedMonth}
         role="cfo"
         agent={data.agent}
         workspaceName={data.workspace.name}

@@ -24,6 +24,8 @@ export default async function SalesPage() {
       <DepartmentPage
         type="sales"
         kpi={data.kpi}
+        monthlyRecords={data.monthlyRecords}
+        defaultMonth={data.selectedMonth}
         role="cmo"
         agent={data.agent}
         workspaceName={data.workspace.name}

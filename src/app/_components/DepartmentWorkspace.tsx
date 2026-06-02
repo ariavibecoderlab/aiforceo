@@ -34,6 +34,7 @@ export function DepartmentWorkspace({
 }: {
   department: DepartmentConfig;
   kpiView: React.ReactNode;
+  monthPicker?: React.ReactNode;
   period: "MTD" | "QTD" | "YTD";
   onPeriodChange: (p: "MTD" | "QTD" | "YTD") => void;
   // Chat props
