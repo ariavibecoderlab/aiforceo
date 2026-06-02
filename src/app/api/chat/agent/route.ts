@@ -398,9 +398,15 @@ export async function POST(req: NextRequest): Promise<Response> {
             messageId: aMsg?.id,
           });
 
+          // Load the actual message count from DB to ensure summary triggers fire correctly
+          // (client sends a windowed subset of messages, not the full history)
+          const { count: dbMsgCount } = await admin
+            .from("messages")
+            .select("*", { count: "exact", head: true })
+            .eq("conversation_id", conversationId);
+          const newMsgCount = dbMsgCount ?? 0;
+
           // Update conversation title + message_count
-          // message_count tracks total messages for summary scheduling
-          const newMsgCount = messages.length + 1; // +1 for the assistant message just saved
           await admin
             .from("conversations")
             .update({

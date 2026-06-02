@@ -346,6 +346,7 @@ export function ChatClient({
   const [newChatLoading, setNewChatLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [feedbackSent, setFeedbackSent] = useState<Record<number, "up" | "down">>({});
+  const [kpiApplied, setKpiApplied] = useState<Record<number, boolean>>({});
   const [starredMsgs, setStarredMsgs] = useState<Record<number, boolean>>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const {
@@ -850,8 +851,7 @@ export function ChatClient({
                   {isDone && m.content.includes('"type":"kpi_update"') && (() => {
                     const match = m.content.match(/```(?:json)?\s*(\{[\s\S]*?"type"\s*:\s*"kpi_update"[\s\S]*?\})\s*```/);
                     if (!match) return null;
-                    const kpiKey = `kpi_${i}`;
-                    const alreadyApplied = feedbackSent[i] === "up"; // reuse feedbackSent as applied tracker
+                    const alreadyApplied = kpiApplied[i] === true;
                     return (
                       <div style={{
                         marginTop: 8, padding: "12px 16px", borderRadius: 12,
@@ -891,7 +891,7 @@ export function ChatClient({
                                 })();
                                 const res = await mergeKPIUpdate(parsed.updates, targetMonth);
                                 if (res.ok) {
-                                  setFeedbackSent((prev) => ({ ...prev, [i]: "up" }));
+                                  setKpiApplied((prev) => ({ ...prev, [i]: true }));
                                   // Clear ALL localStorage KPI caches so dashboard loads fresh from DB
                                   try {
                                     const keys = Object.keys(localStorage).filter(k => k.startsWith("ai4c_kpi_"));
@@ -1073,10 +1073,10 @@ export function ChatClient({
                 fontSize: 16,
                 border: "none",
                 cursor: "pointer",
-                opacity: pending || !input.trim() ? 0.35 : 1,
+                opacity: pending || (!input.trim() && pendingAttachments.length === 0) ? 0.35 : 1,
                 transition: "opacity 0.15s",
               }}
-              disabled={pending || !input.trim()}
+              disabled={pending || (!input.trim() && pendingAttachments.length === 0)}
             >
               {pending ? "…" : "→"}
             </button>

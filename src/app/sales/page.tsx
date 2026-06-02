@@ -3,7 +3,7 @@ import { DepartmentPage } from "@/app/_components/DepartmentPage";
 import { loadDepartmentData } from "@/server/actions/department";
 
 export default async function SalesPage() {
-  const data = await loadDepartmentData("cmo");
+  const data = await loadDepartmentData("cmo", "Sales Intelligence");
 
   return (
     <div

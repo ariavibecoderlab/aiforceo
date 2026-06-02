@@ -76,7 +76,9 @@ export async function GET(req: NextRequest) {
           // Brand-new user with no workspace and no membership
           return NextResponse.redirect(`${url.origin}/onboarding`);
         }
-        // Has at least one active membership — go to dashboard
+        // Has at least one active membership — go to dashboard (not /command which
+        // requires an owned workspace and could loop for members without one)
+        return NextResponse.redirect(`${url.origin}/dashboard`);
       } else {
         return NextResponse.redirect(`${url.origin}/onboarding`);
       }

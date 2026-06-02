@@ -51,22 +51,27 @@ function deepMerge(
 
 export async function loadMonthlyKPIs(
   workspaceId: string,
-  year?: number,
+  _year?: number, // kept for backward compat — year filter removed (see DECISION_LOG)
 ): Promise<MonthlyKPIRecord[]> {
   const admin = createSupabaseAdminClient();
-  const y = year ?? new Date().getFullYear();
-  const monthPrefix = `${y}-`;
 
+  // Load all monthly records (up to 24 months / 2 years) sorted ascending.
+  // Previously filtered by current year, which made prior-year data invisible.
   const { data, error } = await admin
     .from("workspace_kpi_months")
     .select("month, period_data, finance_data, ops_data, marketing")
     .eq("workspace_id", workspaceId)
-    .like("month", `${monthPrefix}%`)
-    .order("month", { ascending: true });
+    .order("month", { ascending: false })
+    .limit(24);
 
   if (error || !data) return [];
 
-  return data.map((row) => ({
+  // Sort ascending after fetching (query was DESC to get the 24 most-recent months)
+  const sorted = [...data].sort((a, b) =>
+    (a.month as string).localeCompare(b.month as string),
+  );
+
+  return sorted.map((row) => ({
     month: row.month as string,
     periodData: { ...ZERO_PERIOD, ...(row.period_data as object) } as PeriodRaw,
     financeData: {

@@ -51,7 +51,9 @@ export function CommandCentre({
 
   const healthData = {
     sales: (periods?.MTD as Record<string, number> | undefined)?.revenue
-      ?? (periods?.MTD?.reach ? Math.round((periods.MTD.reach ?? 0) * (periods.MTD.avgSale ?? 0) * (periods.MTD.avgTxn ?? 1)) : 0),
+      ?? (periods?.MTD?.reach
+        ? Math.round((periods.MTD.reach ?? 0) * (periods.MTD.leadCR ?? 1) * (periods.MTD.saleCR ?? 1) * (periods.MTD.avgSale ?? 0) * (periods.MTD.avgTxn ?? 1))
+        : 0),
     gpPct: periods?.MTD?.gpPct ?? 0,
     customers: ops?.customers ?? 0,
     repeatRate: ops?.repeatRate ?? 0,

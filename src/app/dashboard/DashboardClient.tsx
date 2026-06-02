@@ -150,7 +150,7 @@ function CEOView({
           gap: 12,
         }}
       >
-        <Stat label="Total Sales" value={rm(d.sales)} sub={period} delta={momTrend?.periodDelta?.reach} />
+        <Stat label="Total Sales" value={rm(d.sales)} sub={period} delta={momTrend?.periodDelta?.revenue ?? momTrend?.periodDelta?.reach} />
         <Stat
           label="Gross Profit"
           value={rm(d.gp)}
@@ -1042,7 +1042,7 @@ function GroupView({
                       style={{ padding: "12px", color: C.dim, fontSize: 12 }}
                     >
                       No KPI data —{" "}
-                      <Link href="/settings" style={{ color: C.gold }}>
+                      <Link href="/dashboard" style={{ color: C.gold }}>
                         set up KPIs
                       </Link>
                     </td>
@@ -1130,7 +1130,7 @@ function GroupView({
                       style={{ padding: "12px", color: C.dim, fontSize: 12 }}
                     >
                       No KPI data —{" "}
-                      <Link href="/settings" style={{ color: C.gold }}>
+                      <Link href="/dashboard" style={{ color: C.gold }}>
                         set up KPIs
                       </Link>
                     </td>
@@ -1232,7 +1232,7 @@ function GroupView({
                       style={{ padding: "12px", color: C.dim, fontSize: 12 }}
                     >
                       No KPI data —{" "}
-                      <Link href="/settings" style={{ color: C.gold }}>
+                      <Link href="/dashboard" style={{ color: C.gold }}>
                         set up KPIs
                       </Link>
                     </td>
@@ -1423,8 +1423,6 @@ function EditModal({
   const tab = "MTD" as const; // Always edit raw monthly data
 
   function numField(path: string[], val: string) {
-    const n = parseFloat(val);
-    if (isNaN(n)) return;
     setForm((prev) => {
       const copy: WorkspaceKPI = JSON.parse(JSON.stringify(prev));
       let obj: Record<string, unknown> = copy as unknown as Record<
@@ -1436,7 +1434,13 @@ function EditModal({
         obj = obj[key] as Record<string, unknown>;
       }
       const lastKey = path[path.length - 1] as string;
-      obj[lastKey] = n;
+      if (val === "") {
+        // Allow clearing optional fields by setting to undefined
+        obj[lastKey] = undefined;
+      } else {
+        const n = parseFloat(val);
+        if (!isNaN(n)) obj[lastKey] = n;
+      }
       return copy;
     });
   }

@@ -65,8 +65,9 @@ function currentMonth(): string {
 function extractPeriodData(periods: KPIUpdatePayload["periods"]): Record<string, unknown> {
   if (!periods) return {};
 
-  // Check for flat fields first (new format)
+  // Check for flat fields first (new format — includes revenue/orders for completeness)
   const flatKeys = [
+    "revenue", "orders",
     "reach", "leadCR", "saleCR", "avgSale", "avgTxn",
     "gpPct", "opex", "capexMtd", "capexYtd", "fixedCost",
   ];

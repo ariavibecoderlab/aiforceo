@@ -288,51 +288,6 @@ function TaskCard({
           </div>
         )}
 
-        {/* Inline edit form */}
-        {isEditing && (
-          <div style={{ borderTop: `1px solid ${D.line}`, paddingTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-            <div>
-              <label style={{ fontSize: 10, fontWeight: 600, color: D.muted, display: "block", marginBottom: 3 }}>Title</label>
-              <input value={editTitle} onChange={e => setEditTitle(e.target.value)}
-                style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: `1px solid ${D.line}`, background: D.panel, color: D.text, fontSize: 12, boxSizing: "border-box" }} />
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <div>
-                <label style={{ fontSize: 10, fontWeight: 600, color: D.muted, display: "block", marginBottom: 3 }}>Assign to Agent</label>
-                <select value={editAgent} onChange={e => setEditAgent(e.target.value)}
-                  style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: `1px solid ${D.line}`, background: D.panel, color: D.text, fontSize: 12 }}>
-                  <option value="">— Unassigned —</option>
-                  {AGENT_OPTIONS.map(a => <option key={a.value} value={a.value}>{a.label.split(" — ")[0]}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize: 10, fontWeight: 600, color: D.muted, display: "block", marginBottom: 3 }}>Priority</label>
-                <select value={editPriority} onChange={e => setEditPriority(Number(e.target.value) as TaskPriority)}
-                  style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: `1px solid ${D.line}`, background: D.panel, color: D.text, fontSize: 12 }}>
-                  <option value={3}>High</option>
-                  <option value={2}>Medium</option>
-                  <option value={1}>Low</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label style={{ fontSize: 10, fontWeight: 600, color: D.muted, display: "block", marginBottom: 3 }}>Due Date</label>
-              <input type="date" value={editDue} onChange={e => setEditDue(e.target.value)}
-                style={{ padding: "7px 10px", borderRadius: 7, border: `1px solid ${D.line}`, background: D.panel, color: D.text, fontSize: 12 }} />
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={handleSaveEdit} disabled={savePending}
-                style={{ padding: "6px 14px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "var(--accent)", color: "#0a0e1a", border: "none" }}>
-                {savePending ? "Saving…" : "✓ Save"}
-              </button>
-              <button onClick={() => setIsEditing(false)}
-                style={{ padding: "6px 12px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", background: "transparent", color: D.muted, border: `1px solid ${D.line}` }}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Delete for done/dismissed */}
         {!isActive && (
           <button
@@ -352,6 +307,51 @@ function TaskCard({
           </button>
         )}
       </div>
+
+      {/* Inline edit form — sibling of the bottom row so it spans the full card width */}
+      {isEditing && (
+        <div style={{ borderTop: `1px solid ${D.line}`, paddingTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div>
+            <label style={{ fontSize: 10, fontWeight: 600, color: D.muted, display: "block", marginBottom: 3 }}>Title</label>
+            <input value={editTitle} onChange={e => setEditTitle(e.target.value)}
+              style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: `1px solid ${D.line}`, background: D.panel, color: D.text, fontSize: 12, boxSizing: "border-box" }} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 600, color: D.muted, display: "block", marginBottom: 3 }}>Assign to Agent</label>
+              <select value={editAgent} onChange={e => setEditAgent(e.target.value)}
+                style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: `1px solid ${D.line}`, background: D.panel, color: D.text, fontSize: 12 }}>
+                <option value="">— Unassigned —</option>
+                {AGENT_OPTIONS.map(a => <option key={a.value} value={a.value}>{a.label.split(" — ")[0]}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 600, color: D.muted, display: "block", marginBottom: 3 }}>Priority</label>
+              <select value={editPriority} onChange={e => setEditPriority(Number(e.target.value) as TaskPriority)}
+                style={{ width: "100%", padding: "7px 10px", borderRadius: 7, border: `1px solid ${D.line}`, background: D.panel, color: D.text, fontSize: 12 }}>
+                <option value={3}>High</option>
+                <option value={2}>Medium</option>
+                <option value={1}>Low</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label style={{ fontSize: 10, fontWeight: 600, color: D.muted, display: "block", marginBottom: 3 }}>Due Date</label>
+            <input type="date" value={editDue} onChange={e => setEditDue(e.target.value)}
+              style={{ padding: "7px 10px", borderRadius: 7, border: `1px solid ${D.line}`, background: D.panel, color: D.text, fontSize: 12 }} />
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={handleSaveEdit} disabled={savePending}
+              style={{ padding: "6px 14px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "var(--accent)", color: "#0a0e1a", border: "none" }}>
+              {savePending ? "Saving…" : "✓ Save"}
+            </button>
+            <button onClick={() => setIsEditing(false)}
+              style={{ padding: "6px 12px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", background: "transparent", color: D.muted, border: `1px solid ${D.line}` }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

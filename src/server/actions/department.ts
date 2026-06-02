@@ -39,6 +39,7 @@ export type DepartmentData = {
 
 export async function loadDepartmentData(
   agentRole: AgentRole,
+  conversationTitle?: string,
 ): Promise<DepartmentData> {
   const ctx = await getCurrentWorkspace();
   if (!ctx || !ctx.workspace.onboarded) redirect("/onboarding");
@@ -49,9 +50,11 @@ export async function loadDepartmentData(
 
   // KPI data
   const monthlyRecords = await loadMonthlyKPIs(workspace.id);
-  const month = currentMonth();
-  const kpi = monthlyRecords.length > 0 ? buildKPIView(monthlyRecords, month) : null;
-  const momTrend = monthlyRecords.length > 0 ? computeMoMTrend(monthlyRecords, month) : null;
+  const latestDataMonth = monthlyRecords.length > 0
+    ? [...monthlyRecords].sort((a, b) => b.month.localeCompare(a.month))[0]!.month
+    : currentMonth();
+  const kpi = monthlyRecords.length > 0 ? buildKPIView(monthlyRecords, latestDataMonth) : null;
+  const momTrend = monthlyRecords.length > 0 ? computeMoMTrend(monthlyRecords, latestDataMonth) : null;
 
   // Conversation: find or create
   const admin = createSupabaseAdminClient();
@@ -64,14 +67,20 @@ export async function loadDepartmentData(
     .maybeSingle();
   const industry: string | null = bizProfile?.industry ?? null;
 
-  let { data: conversation } = await admin
+  // When a conversationTitle is provided, find a conversation matching that title prefix
+  // so Sales Intelligence and Marketing Intelligence get separate conversations
+  let conversationQuery = admin
     .from("conversations")
     .select("id, agent_role, workspace_id, title, created_at, updated_at")
     .eq("workspace_id", workspace.id)
     .eq("agent_role", agentRole)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("updated_at", { ascending: false });
+
+  if (conversationTitle) {
+    conversationQuery = conversationQuery.ilike("title", `${conversationTitle}%`);
+  }
+
+  let { data: conversation } = await conversationQuery.limit(1).maybeSingle();
 
   if (!conversation) {
     const ins = await admin
@@ -79,7 +88,7 @@ export async function loadDepartmentData(
       .insert({
         workspace_id: workspace.id,
         agent_role: agentRole,
-        title: "New chat",
+        title: conversationTitle ?? "New chat",
       })
       .select("id, agent_role, workspace_id, title, created_at, updated_at")
       .single();
@@ -89,19 +98,27 @@ export async function loadDepartmentData(
     conversation = ins.data;
   }
 
+  // For past conversations list: filter by title prefix if provided so each department
+  // shows its own history
+  let pastConvQuery = admin
+    .from("conversations")
+    .select("id, title, updated_at")
+    .eq("workspace_id", workspace.id)
+    .eq("agent_role", agentRole)
+    .order("updated_at", { ascending: false })
+    .limit(20);
+
+  if (conversationTitle) {
+    pastConvQuery = pastConvQuery.ilike("title", `${conversationTitle}%`);
+  }
+
   const [{ data: messages }, { data: pastConversations }] = await Promise.all([
     admin
       .from("messages")
       .select("id, role, content, created_at")
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: true }),
-    admin
-      .from("conversations")
-      .select("id, title, updated_at")
-      .eq("workspace_id", workspace.id)
-      .eq("agent_role", agentRole)
-      .order("updated_at", { ascending: false })
-      .limit(20),
+    pastConvQuery,
   ]);
 
   const agentMeta = AGENTS[agentRole];
@@ -119,7 +136,7 @@ export async function loadDepartmentData(
     kpi,
     monthlyRecords,
     momTrend,
-    selectedMonth: month,
+    selectedMonth: latestDataMonth,
     industry,
     conversationId: conversation.id,
     initialMessages: (messages ?? []).map((m) => ({
