@@ -144,7 +144,7 @@ export function CommandCentre({
                 <ActionCard
                   title={task.title}
                   description={task.description ?? (task.source_agent ? `From ${task.source_agent.toUpperCase()}` : "")}
-                  type={task.type as Exclude<TaskType, "action">}
+                  type={task.type}
                   timeAgo={task.due_date ? `Due ${task.due_date}` : ""}
                 />
               </Link>

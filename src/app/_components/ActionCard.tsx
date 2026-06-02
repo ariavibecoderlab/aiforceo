@@ -1,6 +1,6 @@
 "use client";
 
-type ActionType = "approval" | "review" | "follow-up" | "alert";
+type ActionType = "approval" | "review" | "follow-up" | "alert" | "action";
 
 type Props = {
   title: string;
@@ -11,10 +11,11 @@ type Props = {
 };
 
 const TYPE_CONFIG: Record<ActionType, { label: string; color: string; bg: string }> = {
-  approval: { label: "Approval", color: "var(--accent)", bg: "rgba(197,165,114,0.12)" },
-  review:   { label: "Review",   color: "var(--primary)", bg: "rgba(37,99,235,0.12)" },
-  "follow-up": { label: "Follow-up", color: "var(--amber)", bg: "rgba(229,169,60,0.12)" },
-  alert:    { label: "Alert",    color: "var(--red)", bg: "rgba(229,84,75,0.12)" },
+  approval:    { label: "Approval",   color: "var(--accent)",  bg: "rgba(197,165,114,0.12)" },
+  review:      { label: "Review",     color: "var(--primary)", bg: "rgba(37,99,235,0.12)" },
+  "follow-up": { label: "Follow-up",  color: "var(--amber)",   bg: "rgba(229,169,60,0.12)" },
+  alert:       { label: "Alert",      color: "var(--red)",     bg: "rgba(229,84,75,0.12)" },
+  action:      { label: "Action",     color: "#a855f7",        bg: "rgba(168,85,247,0.12)" },
 };
 
 export function ActionCard({ title, description, type, timeAgo, onClick }: Props) {
