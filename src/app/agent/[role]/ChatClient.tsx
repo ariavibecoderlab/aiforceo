@@ -456,11 +456,13 @@ export function ChatClient({
         body: JSON.stringify({
           conversationId,
           role,
-          messages: next.map(({ role, content, attachments }, idx) => ({
+          // Optimization: only send last 8 messages to reduce payload size.
+          // The server injects a conversation summary for older context.
+          messages: (next.length > 8 ? next.slice(-8) : next).map(({ role, content, attachments }, idx, arr) => ({
             role,
             content,
             // Only send base64 for the last message (current turn)
-            ...(idx === next.length - 1 && attachments?.length
+            ...(idx === arr.length - 1 && attachments?.length
               ? { attachments: sentAttachments.map(({ name, mimeType, size, base64 }) => ({ name, mimeType, size, base64 })) }
               : {}),
           })),

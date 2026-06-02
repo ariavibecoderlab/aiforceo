@@ -43,19 +43,21 @@ const VALID_CATEGORIES = new Set<MemoryCategory>([
 
 const EXTRACTION_SYSTEM = `You are a memory extractor for an AI business advisor system.
 You receive one user message and one AI assistant reply from a business conversation.
-Your job: extract only concrete, reusable facts that would help future conversations.
+Your job: extract concrete, reusable facts that would help future conversations.
+Be thorough — extract up to 5 items per turn. Capture everything worth remembering.
 
 Rules:
 - Only extract facts explicitly stated, never inferred.
 - Ignore pleasantries, greetings, generic questions ("thanks", "can you help", "what do you think").
 - Each memory must be a single self-contained sentence (max 160 characters).
 - Category options: business_fact | decision | preference | concern | milestone
-  · business_fact  — factual update about the business not in the onboarding profile
-  · decision       — strategic or operational decision made
-  · preference     — how the owner wants the AI to communicate or behave
-  · concern        — problem, fear, or worry the owner expressed
-  · milestone      — past achievement mentioned
+  · business_fact  — revenue, customers, metrics, team size, product details, partnerships, timelines, or any factual business update not in the onboarding profile
+  · decision       — strategic or operational decision made or confirmed ("decided to delay expansion", "chose Shopify over WooCommerce")
+  · preference     — how the owner wants the AI to communicate, format responses, or behave ("prefers bullet points", "wants Malay language replies")
+  · concern        — problem, fear, risk, or worry the owner expressed ("worried about cash flow", "concerned about staff turnover")
+  · milestone      — past achievement, completed goal, or significant event ("launched second outlet in March", "hit RM 100K MRR")
 - Importance: 1=nice-to-know, 2=useful context, 3=critical (affects strategy or finances)
+- Look for: numbers/metrics shared, decisions made, action items mentioned, preferences stated, concerns raised, and context discussed.
 - Return a JSON array only. If nothing is worth remembering, return [].
 
 JSON schema for each item:

@@ -14,6 +14,7 @@ import { buildSystemPrompt, type AgentRole } from "@/lib/prompts";
 import { getRemainingTokens, recordUsage } from "@/lib/credits";
 import { buildSheetsContext, fetchSheetByUrl } from "@/lib/google-sheets";
 import { loadMemories, extractAndSaveMemories } from "@/lib/memory";
+import { loadConversationContext, generateConversationSummary } from "@/lib/conversation-summary";
 import { uploadAttachmentsToStorage } from "@/lib/attachments";
 import { parseDelegationPlan, executeDelegation, synthesizeDelegation } from "@/lib/delegation";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
@@ -286,15 +287,22 @@ export async function POST(req: NextRequest): Promise<Response> {
       let outputTokens = 0;
 
       try {
+        // Optimize: use summary + last 6 messages instead of full history
+        const { contextMessages } = await loadConversationContext({
+          conversationId,
+          workspaceId: workspace.id,
+          currentMessages: messages,
+        });
+
         const anthropicStream = anthropic.messages.stream({
           model:      ANTHROPIC_MODEL,
           max_tokens: 1500,
           system:     finalSystem,
-          // Last user message uses content blocks (text + image/doc); history is plain strings
-          messages: messages.map((m, idx) => ({
-            role:    m.role,
-            content: (idx === messages.length - 1 && m.role === "user")
-              ? buildContentBlocks(m.content, m.attachments)
+          // Last message uses content blocks (text + image/doc); history is plain strings
+          messages: contextMessages.map((m, idx) => ({
+            role:    m.role as "user" | "assistant",
+            content: (idx === contextMessages.length - 1 && m.role === "user")
+              ? buildContentBlocks(m.content, (m as typeof messages[number]).attachments)
               : (m.content || " "),
           })),
         });
@@ -389,11 +397,14 @@ export async function POST(req: NextRequest): Promise<Response> {
             messageId: aMsg?.id,
           });
 
-          // Update conversation title from first user message
+          // Update conversation title + message_count
+          // message_count tracks total messages for summary scheduling
+          const newMsgCount = messages.length + 1; // +1 for the assistant message just saved
           await admin
             .from("conversations")
             .update({
               updated_at: new Date().toISOString(),
+              message_count: newMsgCount,
               ...(messages.length <= 2
                 ? { title: lastUser.content.slice(0, 60) }
                 : {}),
@@ -414,6 +425,19 @@ export async function POST(req: NextRequest): Promise<Response> {
             userMessage:      lastUser.content,
             assistantMessage: fullText,
           });
+
+          // Generate conversation summary at messages 10, 15, 20, 25...
+          if (newMsgCount >= 10 && newMsgCount % 5 === 0) {
+            void generateConversationSummary({
+              conversationId,
+              workspaceId: workspace.id,
+              agentRole: role,
+              messages: [
+                ...messages.map((m) => ({ role: m.role, content: m.content })),
+                { role: "assistant", content: fullText, id: aMsg?.id },
+              ],
+            });
+          }
         } catch {
           // Non-fatal — usage discrepancy handled in reconciliation
         }
